@@ -1,0 +1,18 @@
+{
+  "name": "Teacher App Hub",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.11-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" }
+  },
+  "containerEnv": {
+    "HUB_DATA_DIR": "/workspaces/.hermes-hub",
+    "HUB_COOKIE_SECURE": "true"
+  },
+  "forwardPorts": [9120, 9119],
+  "portsAttributes": {
+    "9120": { "label": "Hermes Hub", "visibility": "private", "onAutoForward": "notify" },
+    "9119": { "label": "Official Hermes Dashboard", "visibility": "private", "onAutoForward": "silent" }
+  },
+  "postCreateCommand": "bash scripts/bootstrap-dev.sh",
+  "remoteUser": "vscode"
+}

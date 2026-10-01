@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teacher-app-hub.local/schemas/workflow.schema.json",
+  "title": "Bounded workflow mode",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "displayName", "stages", "limits", "requiresTesting", "requiresIndependentReview", "requiresDeploymentApproval"],
+  "properties": {
+    "id": { "enum": ["quick", "standard", "deep", "maximum"] },
+    "displayName": { "type": "string" },
+    "stages": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "owner"],
+        "properties": {
+          "id": { "type": "string" },
+          "owner": { "type": "string" }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modelTurns", "toolCalls", "wallClockSeconds", "contextTokens", "parallelAgents", "refinementCycles"],
+      "properties": {
+        "modelTurns": { "type": "integer", "minimum": 1 },
+        "toolCalls": { "type": "integer", "minimum": 0 },
+        "wallClockSeconds": { "type": "integer", "minimum": 1 },
+        "contextTokens": { "type": "integer", "minimum": 1 },
+        "parallelAgents": { "type": "integer", "minimum": 1 },
+        "refinementCycles": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "requiresTesting": { "const": true },
+    "requiresIndependentReview": { "const": true },
+    "requiresDeploymentApproval": { "const": true }
+  }
+}

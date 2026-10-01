@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teacher-app-hub.local/schemas/agent.schema.json",
+  "title": "Specialist agent definition",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "displayName", "role", "instructions", "allowedTools", "allowedProjectPaths", "skills", "memoryScope", "modelSelection", "resourceBudget", "handoffRules", "approvalRequirements"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]{1,63}$" },
+    "displayName": { "type": "string", "minLength": 1 },
+    "role": { "type": "string", "minLength": 1 },
+    "instructions": { "type": "string", "minLength": 1 },
+    "allowedTools": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+    "allowedProjectPaths": { "type": "array", "items": { "type": "string" } },
+    "skills": { "type": "array", "items": { "type": "string" } },
+    "memoryScope": { "type": "string" },
+    "modelSelection": { "type": "object" },
+    "resourceBudget": { "type": "object" },
+    "handoffRules": { "type": "array", "items": { "type": "object" } },
+    "approvalRequirements": { "type": "array", "items": { "type": "string" } }
+  }
+}

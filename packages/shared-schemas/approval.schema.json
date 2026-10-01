@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teacher-app-hub.local/schemas/approval.schema.json",
+  "title": "Scoped approval",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "action", "target", "contentHash", "status", "requestedBy", "createdAt"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "action": { "enum": ["registry_export", "git_commit", "git_push", "clasp_push", "apps_script_deploy", "external_backup", "restore", "destructive_change"] },
+    "target": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "contentHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "status": { "enum": ["pending", "approved", "consumed", "invalidated", "rejected"] },
+    "requestedBy": { "type": "string" },
+    "approvedBy": { "type": ["string", "null"] },
+    "createdAt": { "type": "string", "format": "date-time" }
+  }
+}

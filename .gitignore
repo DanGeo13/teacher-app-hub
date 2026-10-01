@@ -1,0 +1,36 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+.venv/
+**/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node
+node_modules/
+**/node_modules/
+Apps/system/hermes-hub/frontend/dist/
+*.tsbuildinfo
+playwright-report/
+test-results/
+
+# Runtime state and local exports
+.hermes-hub/
+*.db
+*.db-shm
+*.db-wal
+local-backups/
+hermes-hub-milestone.patch
+
+# Editors and operating systems
+.DS_Store
+.vscode/
+.idea/

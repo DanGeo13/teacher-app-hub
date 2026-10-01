@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teacher-app-hub.local/schemas/agents-registry.schema.json",
+  "title": "Hermes Hub agent registry",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "status", "agents"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "status": { "enum": ["planned", "enabled"] },
+    "agents": { "type": "array", "items": { "$ref": "agent.schema.json" } }
+  }
+}

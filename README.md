@@ -1,1 +1,16 @@
 # teacher-app-hub
+
+Hermes Hub is an authenticated browser control panel for persistent teaching and personal application registries. Milestone 0.1 provides a durable disconnected foundation: it reports unavailable runtimes honestly and does not simulate Hermes or model behaviour.
+
+## Current milestone
+
+- React/TypeScript responsive frontend and conservative PWA shell.
+- FastAPI/Pydantic backend with server-side sessions and CSRF protection.
+- SQLite migrations, revision-safe registry writes, audit events and local snapshots.
+- Teacher Hub and Lifestyle Hub add/edit/reorder/archive workflows.
+- Server-side Hermes and Ollama availability probes with unverified capabilities kept separate.
+- Approval records bound to action, target and content hash; external writes fail closed.
+
+Start with [docs/setup.md](docs/setup.md). Read [docs/evidence.md](docs/evidence.md) and [docs/known-limitations.md](docs/known-limitations.md) before enabling any integration.
+
+No repository commit, GitHub push, Apps Script write, model download or public-port configuration is performed by the application.

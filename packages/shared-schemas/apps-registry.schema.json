@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teacher-app-hub.local/schemas/apps-registry.schema.json",
+  "title": "Hermes Hub application registry export",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "generatedAt", "apps"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "schemaVersion": { "const": 1 },
+    "generatedAt": { "type": ["string", "null"], "format": "date-time" },
+    "apps": { "type": "array", "items": { "$ref": "app.schema.json" } }
+  }
+}

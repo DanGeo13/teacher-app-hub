@@ -1,0 +1,6 @@
+{
+  "$schema": "../packages/shared-schemas/apps-registry.schema.json",
+  "schemaVersion": 1,
+  "generatedAt": null,
+  "apps": []
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teacher-app-hub.local/schemas/handoff.schema.json",
+  "title": "Agent hand-off package",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["taskId", "runId", "projectId", "originatingAgent", "receivingAgent", "requirement", "acceptanceCriteria", "currentStage", "findings", "artifactPaths", "codeRevision", "tests", "unresolvedIssues", "allowedActions", "approvalState", "budgetRemaining", "nextRequiredAction"],
+  "properties": {
+    "taskId": { "type": "string", "format": "uuid" },
+    "runId": { "type": "string", "format": "uuid" },
+    "projectId": { "type": "string", "minLength": 1 },
+    "originatingAgent": { "type": "string", "minLength": 1 },
+    "receivingAgent": { "type": "string", "minLength": 1 },
+    "requirement": { "type": "string", "minLength": 1 },
+    "acceptanceCriteria": { "type": "array", "items": { "type": "string" } },
+    "currentStage": { "type": "string" },
+    "findings": { "type": "array", "items": { "type": "string" } },
+    "artifactPaths": { "type": "array", "items": { "type": "string" } },
+    "branchOrWorktree": { "type": ["string", "null"] },
+    "codeRevision": { "type": "string" },
+    "tests": { "type": "array", "items": { "type": "object" } },
+    "unresolvedIssues": { "type": "array", "items": { "type": "string" } },
+    "allowedActions": { "type": "array", "items": { "type": "string" } },
+    "approvalState": { "type": "string" },
+    "budgetRemaining": { "type": "object" },
+    "nextRequiredAction": { "type": "string" }
+  }
+}
