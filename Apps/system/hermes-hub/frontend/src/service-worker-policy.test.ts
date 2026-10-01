@@ -23,4 +23,9 @@ describe('service worker privacy policy', () => {
     expect(source).toContain("url.pathname.startsWith('/icons/')")
     expect(source).not.toContain("new Set(['script', 'style', 'image'")
   })
+
+  it('caches only the public root navigation shell', () => {
+    expect(source).toContain("url.pathname !== '/' && url.pathname !== '/index.html'")
+    expect(source).toContain("response.ok && response.type === 'basic'")
+  })
 })

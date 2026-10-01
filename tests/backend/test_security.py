@@ -4,6 +4,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
+from hermes_hub_backend.api import create_app
 from hermes_hub_backend.approvals import ApprovalService, canonical_content_hash
 from hermes_hub_backend.errors import ApprovalError
 
@@ -57,6 +60,17 @@ def test_authentication_and_csrf_are_enforced(client, teaching_app, settings):
         },
         json=teaching_app,
     ).status_code == 403
+
+
+def test_secure_cookie_uses_host_prefix_and_secure_flag(secure_settings):
+    with TestClient(create_app(secure_settings)) as secure_client:
+        response = secure_client.post(
+            "/api/auth/login", headers={"Origin": ORIGIN}, json={"password": PASSWORD}
+        )
+    assert response.status_code == 200
+    cookie = response.headers["set-cookie"]
+    assert "__Host-hermes_hub_session=" in cookie
+    assert "Secure" in cookie and "Path=/" in cookie
 
 
 def test_expired_session_is_deleted_and_returns_401(client, settings):

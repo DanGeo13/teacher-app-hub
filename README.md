@@ -10,6 +10,9 @@ Hermes Hub is an authenticated browser control panel for persistent teaching and
 - Teacher Hub and Lifestyle Hub add/edit/reorder/archive workflows.
 - Server-side Hermes and Ollama availability probes with unverified capabilities kept separate.
 - Approval records bound to action, target and content hash; external writes fail closed.
+- Hardening coverage for exact Origins, expired sessions, safe snapshots and a four-scenario Chromium browser suite.
+
+The hardening validation remains review-only: it does not enable external-write brokers, approval expiry or migration checksums, and it does not rebuild or alter an existing Codespace automatically.
 
 Start with [docs/setup.md](docs/setup.md). Read [docs/evidence.md](docs/evidence.md) and [docs/known-limitations.md](docs/known-limitations.md) before enabling any integration.
 
