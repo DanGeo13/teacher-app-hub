@@ -43,12 +43,19 @@ def _safe_url(value: str | None) -> str | None:
         return None
     if len(value) > 2048:
         raise ValueError("URL must be 2048 characters or fewer")
-    parsed = urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    if any(ord(char) < 0x20 or char == "\\" for char in value):
+        raise ValueError("URL must not contain control characters or backslashes")
+    try:
+        parsed = urlparse(value)
+        hostname = parsed.hostname
+        parsed.port
+    except ValueError as error:
+        raise ValueError("URL contains an invalid host or port") from error
+    if parsed.scheme not in {"http", "https"} or not hostname:
         raise ValueError("URL must use http or https and include a host")
     if parsed.username or parsed.password:
         raise ValueError("URL must not contain embedded credentials")
-    if parsed.scheme == "http" and parsed.hostname.lower() not in {
+    if parsed.scheme == "http" and hostname.lower() not in {
         "localhost",
         "127.0.0.1",
         "::1",

@@ -39,6 +39,40 @@ def test_authentication_and_csrf_are_enforced(client, teaching_app, settings):
         headers={"Origin": "https://evil.example", "X-CSRF-Token": login.json()["csrfToken"]},
         json=teaching_app,
     ).status_code == 403
+    assert client.post(
+        "/api/apps",
+        headers={
+            "Origin": ORIGIN + "/",
+            "X-CSRF-Token": login.json()["csrfToken"],
+            "X-Forwarded-Host": "testserver",
+        },
+        json=teaching_app,
+    ).status_code == 403
+    assert client.post(
+        "/api/apps",
+        headers={
+            "Origin": "https://evil.example",
+            "X-CSRF-Token": login.json()["csrfToken"],
+            "X-Forwarded-Host": "testserver",
+        },
+        json=teaching_app,
+    ).status_code == 403
+
+
+def test_expired_session_is_deleted_and_returns_401(client, settings):
+    login = client.post(
+        "/api/auth/login", headers={"Origin": ORIGIN}, json={"password": PASSWORD}
+    )
+    assert login.status_code == 200
+    connection = sqlite3.connect(settings.database_path)
+    try:
+        connection.execute("UPDATE sessions SET expires_at = ?", ("2000-01-01T00:00:00+00:00",))
+        connection.commit()
+    finally:
+        connection.close()
+
+    assert client.get("/api/apps").status_code == 401
+    assert client.get("/api/auth/session").json() == {"authenticated": False, "actor": None, "csrfToken": None, "expiresAt": None}
 
 
 def test_approval_invalidation_and_replay_rejection(settings):

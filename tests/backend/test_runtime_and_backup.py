@@ -2,6 +2,7 @@ import sqlite3
 from pathlib import Path
 
 from hermes_hub_backend.backup import BackupService
+from hermes_hub_backend.database import Database
 
 
 def test_missing_hermes_and_ollama_are_explicitly_unavailable(authenticated):
@@ -23,7 +24,11 @@ def test_consistent_snapshot_and_restore(authenticated, teaching_app, settings, 
     snapshot_response = client.post("/api/backups/local", headers=headers)
     assert snapshot_response.status_code == 201
     snapshot = settings.backup_dir / snapshot_response.json()["filename"]
-    assert snapshot.exists()
+    manifest = snapshot.with_suffix(".manifest.json")
+    assert snapshot.exists() and manifest.exists()
+    assert settings.backup_dir.stat().st_mode & 0o777 == 0o700
+    assert snapshot.stat().st_mode & 0o777 == 0o600
+    assert manifest.stat().st_mode & 0o777 == 0o600
 
     restored = tmp_path / "restored.db"
     BackupService.restore_to_new_database(snapshot, restored)
@@ -34,6 +39,18 @@ def test_consistent_snapshot_and_restore(authenticated, teaching_app, settings, 
         assert connection.execute("SELECT COUNT(*) FROM backup_records").fetchone()[0] == 0
     finally:
         connection.close()
+    assert restored.stat().st_mode & 0o777 == 0o600
+
+
+def test_backup_cleanup_retains_only_recent_snapshots(settings):
+    service = BackupService(Database(settings.database_path), settings.backup_dir)
+    for _ in range(service.RETAINED_SNAPSHOTS + 2):
+        service.create_snapshot()
+    snapshots = list(settings.backup_dir.glob("hub-*.db"))
+    manifests = list(settings.backup_dir.glob("hub-*.manifest.json"))
+    assert len(snapshots) == service.RETAINED_SNAPSHOTS
+    assert len(manifests) == service.RETAINED_SNAPSHOTS
+    assert all(path.stat().st_mode & 0o777 == 0o600 for path in [*snapshots, *manifests])
 
 
 def test_backend_health_and_migrations(client):

@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse
@@ -99,16 +98,10 @@ def create_app(settings: Settings) -> FastAPI:
         origin = request.headers.get("origin")
         if not origin:
             raise HTTPException(status_code=403, detail="Origin header is required")
-        origin = origin.rstrip("/")
-        if settings.allowed_origins:
-            if origin not in settings.allowed_origins:
-                raise HTTPException(status_code=403, detail="Origin is not allowed")
-            return
-        parsed = urlparse(origin)
-        forwarded = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
-        expected_host = forwarded or request.headers.get("host", "")
-        if parsed.scheme not in {"http", "https"} or parsed.netloc != expected_host:
-            raise HTTPException(status_code=403, detail="Origin does not match request host")
+        # The configured allow-list is authoritative. Never derive trust from
+        # Host or any X-Forwarded-* header supplied by an untrusted proxy.
+        if origin not in settings.allowed_origins:
+            raise HTTPException(status_code=403, detail="Origin is not allowed")
 
     def session_token(request: Request) -> str | None:
         return request.cookies.get(settings.cookie_name)
