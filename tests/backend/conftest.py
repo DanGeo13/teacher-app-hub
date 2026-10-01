@@ -34,6 +34,21 @@ def client(settings: Settings):
 
 
 @pytest.fixture
+def secure_settings(tmp_path: Path) -> Settings:
+    return Settings(
+        data_dir=tmp_path / "secure-runtime",
+        admin_password=PASSWORD,
+        cookie_secure=True,
+        allowed_origins=(ORIGIN,),
+        hermes_dashboard_url="http://127.0.0.1:1",
+        hermes_executable="definitely-not-installed-hermes",
+        ollama_base_url="http://127.0.0.1:1",
+        runtime_probe_timeout_seconds=0.2,
+        frontend_dist=tmp_path / "missing-dist",
+    )
+
+
+@pytest.fixture
 def authenticated(client: TestClient):
     response = client.post(
         "/api/auth/login",

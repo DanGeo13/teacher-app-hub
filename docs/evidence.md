@@ -136,3 +136,13 @@ Local verification: **BLOCKED — no Hermes/Ollama/model.** No canned or mock su
 ### E12 — GAS/clasp integration
 
 Candidate references have been identified, but no script, deployment, Google identity, current clasp binary or deployed application is available. The exact deployment action and target therefore remain **EVIDENCE-INCOMPLETE**. No Google authentication, Apps Script write or iframe claim was attempted.
+
+## E13 — Hermes Hub hardening and browser validation
+
+| Field | Record |
+|---|---|
+| Exact action | Enforce exact configured Origins without forwarded-header trust; remove the short-password bypass; reject malformed/control-character URLs; harden 0600 local snapshot creation and bounded cleanup; handle frontend logout failures and 401 session expiry; keep service-worker caching to the public shell; add concurrency, privacy, CI-policy and browser regression coverage |
+| Browser suite | Four scenarios in `Apps/system/hermes-hub/frontend/e2e/registry.spec.ts`: login/logout invalidation, visible failed logout, authenticated API 401 return to sign-in, and registry add/reorder/edit/archive/restore/reload persistence |
+| CI boundary | Chromium is installed with pinned Playwright system dependencies. CI runs only synthetic backend/browser validation, uploads failure PNGs for seven days, disables trace/video, and has read-only contents permission. It never runs Hermes/Ollama, enables external-write brokers, implements approval expiry or migration checksums, or changes Codespaces state. |
+| Local verification | Backend 26 passed; frontend tests 3 passed; TypeScript and Vite build passed; secret scan, npm audit and pip check passed; Playwright discovery lists exactly four tests. Executable browser run is pending the CI Chromium job because this host could not download Chromium. |
+| Codespaces boundary | `docs/setup.md` contains validation-only commands and explicitly prohibits automatic rebuild, migration, cleanup, broker enablement or port-visibility changes. |

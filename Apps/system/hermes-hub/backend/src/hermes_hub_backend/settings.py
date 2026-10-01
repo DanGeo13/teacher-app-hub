@@ -23,17 +23,46 @@ def _bool_env(name: str, default: bool) -> bool:
 
 
 def _validate_runtime_url(name: str, value: str, allow_remote: bool) -> str:
-    parsed = urlparse(value)
-    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+    if not value or any(ord(char) < 0x20 or char == "\\" for char in value):
+        raise ConfigurationError(f"{name} contains control characters or a backslash")
+    try:
+        parsed = urlparse(value)
+        hostname = parsed.hostname
+        parsed.port
+    except ValueError as error:
+        raise ConfigurationError(f"{name} is not a valid URL") from error
+    if parsed.scheme not in {"http", "https"} or not hostname:
         raise ConfigurationError(f"{name} must be an absolute HTTP(S) URL")
     if parsed.username or parsed.password or parsed.query or parsed.fragment:
         raise ConfigurationError(f"{name} must not contain credentials, query parameters or fragments")
-    loopback = parsed.hostname.lower() in {"localhost", "127.0.0.1", "::1"}
+    loopback = hostname.lower() in {"localhost", "127.0.0.1", "::1"}
     if not allow_remote and not loopback:
         raise ConfigurationError(
             f"{name} must be loopback unless HUB_ALLOW_REMOTE_RUNTIME_ENDPOINTS=true"
         )
     return value.rstrip("/")
+
+
+def _validate_origin(origin: str) -> str:
+    if not origin or any(ord(char) < 0x20 or char == "\\" for char in origin):
+        raise ConfigurationError("HUB_ALLOWED_ORIGINS contains control characters or a backslash")
+    try:
+        parsed = urlparse(origin)
+        parsed.port
+    except ValueError as error:
+        raise ConfigurationError(f"invalid HUB_ALLOWED_ORIGINS value: {origin}") from error
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.username
+        or parsed.password
+        or parsed.path not in {"", "/"}
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ConfigurationError(f"invalid HUB_ALLOWED_ORIGINS value: {origin}")
+    return origin.rstrip("/")
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,15 +78,13 @@ class Settings:
     runtime_probe_timeout_seconds: float = 2.0
     frontend_dist: Path | None = None
     allow_remote_runtime_endpoints: bool = False
-    allow_short_test_password: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
         password = os.getenv("HUB_ADMIN_PASSWORD", "")
-        allow_short = _bool_env("HUB_ALLOW_SHORT_TEST_PASSWORD", False)
         if not password:
             raise ConfigurationError("HUB_ADMIN_PASSWORD is required")
-        if len(password) < 16 and not allow_short:
+        if len(password) < 16:
             raise ConfigurationError("HUB_ADMIN_PASSWORD must contain at least 16 characters")
 
         data_value = os.getenv("HUB_DATA_DIR")
@@ -69,7 +96,7 @@ class Settings:
 
         allow_remote = _bool_env("HUB_ALLOW_REMOTE_RUNTIME_ENDPOINTS", False)
         origins = tuple(
-            origin.strip().rstrip("/")
+            _validate_origin(origin.strip())
             for origin in os.getenv("HUB_ALLOWED_ORIGINS", "").split(",")
             if origin.strip()
         )
@@ -77,34 +104,35 @@ class Settings:
         if frontend_value:
             frontend_dist = Path(frontend_value).expanduser().resolve()
         else:
-            frontend_dist = (
-                Path(__file__).resolve().parents[3] / "frontend" / "dist"
-            )
+            frontend_dist = Path(__file__).resolve().parents[3] / "frontend" / "dist"
+
+        try:
+            session_ttl = int(os.getenv("HUB_SESSION_TTL_SECONDS", "43200"))
+            probe_timeout = float(os.getenv("HUB_RUNTIME_PROBE_TIMEOUT_SECONDS", "2"))
+        except ValueError as error:
+            raise ConfigurationError("numeric Hub settings are invalid") from error
 
         settings = cls(
             data_dir=data_dir,
             admin_password=password,
             cookie_secure=_bool_env("HUB_COOKIE_SECURE", True),
             allowed_origins=origins,
-            session_ttl_seconds=int(os.getenv("HUB_SESSION_TTL_SECONDS", "43200")),
-            hermes_dashboard_url=os.getenv(
-                "HERMES_DASHBOARD_URL", "http://127.0.0.1:9119"
-            ),
+            session_ttl_seconds=session_ttl,
+            hermes_dashboard_url=os.getenv("HERMES_DASHBOARD_URL", "http://127.0.0.1:9119"),
             hermes_executable=os.getenv("HERMES_EXECUTABLE", "hermes"),
             ollama_base_url=os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434"),
-            runtime_probe_timeout_seconds=float(
-                os.getenv("HUB_RUNTIME_PROBE_TIMEOUT_SECONDS", "2")
-            ),
+            runtime_probe_timeout_seconds=probe_timeout,
             frontend_dist=frontend_dist,
             allow_remote_runtime_endpoints=allow_remote,
-            allow_short_test_password=allow_short,
         )
         settings.validate()
         return settings
 
     def validate(self) -> None:
-        if len(self.admin_password) < 16 and not self.allow_short_test_password:
+        if len(self.admin_password) < 16:
             raise ConfigurationError("admin password must contain at least 16 characters")
+        if not self.allowed_origins:
+            raise ConfigurationError("HUB_ALLOWED_ORIGINS must contain at least one exact origin")
         if self.session_ttl_seconds < 300 or self.session_ttl_seconds > 86_400:
             raise ConfigurationError("session TTL must be between 300 and 86400 seconds")
         if not 0.2 <= self.runtime_probe_timeout_seconds <= 10:
@@ -118,9 +146,7 @@ class Settings:
             "OLLAMA_BASE_URL", self.ollama_base_url, self.allow_remote_runtime_endpoints
         )
         for origin in self.allowed_origins:
-            parsed = urlparse(origin)
-            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-                raise ConfigurationError(f"invalid HUB_ALLOWED_ORIGINS value: {origin}")
+            _validate_origin(origin)
 
     @property
     def database_path(self) -> Path:

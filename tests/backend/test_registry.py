@@ -108,6 +108,8 @@ def test_invalid_and_unsafe_urls_are_rejected(authenticated, teaching_app):
         "file:///etc/passwd",
         "http://example.test/insecure",
         "https://user:password@example.test/private",
+        "https://[broken",
+        "https://example.test\\@evil.example",
     ]:
         response = client.post(
             "/api/apps", headers=headers, json={**teaching_app, "launchUrl": unsafe}

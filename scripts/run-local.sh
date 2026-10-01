@@ -18,4 +18,5 @@ fi
 
 exec "$backend/.venv/bin/python" -m uvicorn \
   hermes_hub_backend.main:create_app_from_env --factory \
-  --host 127.0.0.1 --port "${HUB_PORT:-9120}"
+  --host 127.0.0.1 --port "${HUB_PORT:-9120}" \
+  --no-proxy-headers
