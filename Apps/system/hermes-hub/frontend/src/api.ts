@@ -1,6 +1,7 @@
 import type { ApiErrorShape, AppInput, AppRecord, HubName, RuntimeState, SessionState } from './types'
 
 let csrfToken: string | null = null
+export const SESSION_EXPIRED_EVENT = 'hermes:session-expired'
 
 export class ApiError extends Error {
   readonly status: number
@@ -12,6 +13,11 @@ export class ApiError extends Error {
     this.status = status
     this.code = code
   }
+}
+
+function notifySessionExpired(): void {
+  csrfToken = null
+  window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -28,6 +34,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     throw new ApiError('The Hermes Hub backend is unavailable.', 0, 'BACKEND_UNAVAILABLE')
   }
   if (!response.ok) {
+    if (response.status === 401 && path !== '/api/auth/session' && path !== '/api/auth/login') {
+      notifySessionExpired()
+    }
     let payload: ApiErrorShape = {}
     try { payload = await response.json() as ApiErrorShape } catch { /* non-JSON error */ }
     const detail = typeof payload.detail === 'string' ? payload.detail : payload.detail?.message

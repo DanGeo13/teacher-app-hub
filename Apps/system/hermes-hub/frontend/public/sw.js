@@ -32,11 +32,16 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (request.mode === 'navigate') {
+    // Hash routes all resolve to the public root shell. Do not cache arbitrary
+    // same-origin navigations that could contain private or future data.
+    if (url.pathname !== '/' && url.pathname !== '/index.html') return
     event.respondWith(
       fetch(request)
         .then((response) => {
-          const copy = response.clone()
-          caches.open(CACHE_NAME).then((cache) => cache.put('/', copy))
+          if (response.ok && response.type === 'basic') {
+            const copy = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put('/', copy))
+          }
           return response
         })
         .catch(async () => (await caches.match('/')) || caches.match('/offline.html')),

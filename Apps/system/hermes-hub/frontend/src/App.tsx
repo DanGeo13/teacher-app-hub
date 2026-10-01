@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { getRuntime, logout, restoreSession } from './api'
+import { getRuntime, logout, restoreSession, SESSION_EXPIRED_EVENT } from './api'
 import { Dashboard } from './components/Dashboard'
 import { Login } from './components/Login'
 import { Maintenance } from './components/Maintenance'
@@ -34,9 +34,15 @@ export default function App() {
     const hash = () => setPage(pageFromHash())
     const connected = () => setOnline(true)
     const disconnected = () => setOnline(false)
+    const expired = () => {
+      setSession({ authenticated: false })
+      setRuntime(null)
+      setSessionError('Your session has expired. Sign in again to continue.')
+    }
     window.addEventListener('hashchange', hash)
     window.addEventListener('online', connected)
     window.addEventListener('offline', disconnected)
+    window.addEventListener(SESSION_EXPIRED_EVENT, expired)
     void registerPwa(setUpdate).catch(() => { /* installability is optional */ })
     const reload = () => window.location.reload()
     navigator.serviceWorker?.addEventListener('controllerchange', reload)
@@ -44,9 +50,19 @@ export default function App() {
       window.removeEventListener('hashchange', hash)
       window.removeEventListener('online', connected)
       window.removeEventListener('offline', disconnected)
+      window.removeEventListener(SESSION_EXPIRED_EVENT, expired)
       navigator.serviceWorker?.removeEventListener('controllerchange', reload)
     }
   }, [])
+
+  useEffect(() => {
+    if (!session?.authenticated || !session.expiresAt) return
+    const remaining = Date.parse(session.expiresAt) - Date.now()
+    const timer = window.setTimeout(() => {
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT))
+    }, Math.max(0, remaining))
+    return () => window.clearTimeout(timer)
+  }, [session?.authenticated, session?.expiresAt])
 
   const refreshRuntime = useCallback(async () => {
     if (!session?.authenticated) return
@@ -58,11 +74,18 @@ export default function App() {
   useEffect(() => { void refreshRuntime() }, [refreshRuntime])
 
   async function signOut() {
-    await logout(); setSession({ authenticated: false }); setRuntime(null)
+    try {
+      await logout()
+      setSession({ authenticated: false })
+      setRuntime(null)
+      setSessionError('')
+    } catch (reason) {
+      setSessionError(reason instanceof Error ? reason.message : 'Sign out failed; you are still signed in.')
+    }
   }
 
   if (session === null) return <main className="loading-screen"><div className="brand-mark">H</div><p>Opening Hermes Hub…</p></main>
-  if (!session.authenticated) return <><Login onLogin={(state) => { setSession(state); setSessionError('') }} />{sessionError && <div className="offline-corner">{sessionError}</div>}</>
+  if (!session.authenticated) return <><Login onLogin={(state) => { setSession(state); setSessionError('') }} />{sessionError && <div className="offline-corner" role="alert">{sessionError}</div>}</>
 
   return <div className="app-shell">
     <aside className="sidebar">
@@ -71,7 +94,8 @@ export default function App() {
       <div className="sidebar__footer"><div className={`connection-dot ${runtime?.hermes.status === 'available' ? 'connection-dot--online' : ''}`} /><div><strong>Runtime</strong><span>{runtime?.hermes.status ?? 'checking'}</span></div><button className="text-button" onClick={() => void signOut()}>Sign out</button></div>
     </aside>
     <main className="content">
-      {(!online || sessionError) && <div className="offline-banner" role="status"><strong>Read-only offline shell.</strong> The registry, Hermes agents and AI are unavailable until the backend reconnects.</div>}
+      {!online && <div className="offline-banner" role="status"><strong>Read-only offline shell.</strong> The registry, Hermes agents and AI are unavailable until the backend reconnects.</div>}
+      {sessionError && <div className="offline-banner" role="alert">{sessionError}</div>}
       {update && <div className="update-banner" role="status"><span>A Hub update is ready.</span><button onClick={() => applyPwaUpdate(update)}>Reload and update</button></div>}
       {page === 'dashboard' && <Dashboard runtime={runtime} runtimeError={runtimeError} onRefresh={() => void refreshRuntime()} />}
       {page === 'teacher' && <RegistryPage hub="teaching" />}
