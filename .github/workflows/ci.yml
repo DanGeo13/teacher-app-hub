@@ -20,7 +20,23 @@ jobs:
       - run: bash scripts/bootstrap-dev.sh
       - run: Apps/system/hermes-hub/backend/.venv/bin/pytest
       - run: npm --prefix Apps/system/hermes-hub/frontend test
+      - run: npm --prefix Apps/system/hermes-hub/frontend run typecheck
       - run: npm --prefix Apps/system/hermes-hub/frontend run build
+      - name: Install pinned Chromium and Linux dependencies
+        working-directory: Apps/system/hermes-hub/frontend
+        run: npx playwright install --with-deps chromium
+      - name: Run isolated synthetic browser validation
+        run: npm --prefix Apps/system/hermes-hub/frontend run test:e2e
+      - name: Upload browser failure screenshots only
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermes-hub-browser-failure-pngs
+          path: Apps/system/hermes-hub/frontend/test-results/**/*.png
+          if-no-files-found: ignore
+          retention-days: 7
       - run: python3 scripts/scan-secrets.py
+      - run: npm --prefix Apps/system/hermes-hub/frontend audit --audit-level=high
+      - run: Apps/system/hermes-hub/backend/.venv/bin/python -m pip check
 
   # CI is validation only. It never runs Hermes, Ollama, clasp or deployment actions.
