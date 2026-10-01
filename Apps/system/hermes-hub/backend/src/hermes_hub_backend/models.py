@@ -192,6 +192,31 @@ class SessionResponse(ApiModel):
     expires_at: datetime | None = None
 
 
+HermesSessionStatus = Literal["connecting", "active", "failed"]
+
+
+class HermesMessageRequest(ApiModel):
+    message: str = Field(min_length=1, max_length=8000)
+
+
+class HermesSessionRecord(ApiModel):
+    id: str
+    hermes_session_id: str | None = None
+    status: HermesSessionStatus
+    transport: Literal["acp-stdio"]
+    protocol_version: int | None = None
+    agent_name: str | None = None
+    agent_version: str | None = None
+    model: str | None = None
+    provider: str | None = None
+    executable: str | None = None
+    message_count: int
+    created_at: str
+    updated_at: str
+    last_stop_reason: str | None = None
+    last_error: str | None = None
+
+
 class ApprovalCreate(ApiModel):
     action: ApprovalAction
     target: str = Field(min_length=1, max_length=512)

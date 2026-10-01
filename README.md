@@ -9,6 +9,7 @@ Hermes Hub is an authenticated browser control panel for persistent teaching and
 - SQLite migrations, revision-safe registry writes, audit events and local snapshots.
 - Teacher Hub and Lifestyle Hub add/edit/reorder/archive workflows.
 - Server-side Hermes and Ollama availability probes with unverified capabilities kept separate.
+- Minimal authentic Hermes sessions: one user message per request over the installed Hermes executable (ACP v1 stdio), streamed SSE progress, persisted session references with no message content — see [docs/hermes-sessions.md](docs/hermes-sessions.md).
 - Approval records bound to action, target and content hash; external writes fail closed.
 - Hardening coverage for exact Origins, expired sessions, safe snapshots and a four-scenario Chromium browser suite.
 

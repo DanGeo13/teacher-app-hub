@@ -52,16 +52,21 @@ class HermesAdapter:
             status = "degraded"
         capabilities = {
             "sessions": RuntimeCapability(
-                "unknown", "Reachability is not proof that authenticated session operations work"
+                "unknown",
+                "ACP sessions run through the installed executable (see docs/hermes-sessions.md); "
+                "dashboard reachability alone is not proof they work",
             ),
             "streaming": RuntimeCapability(
-                "not_run", "TUI Gateway JSON-RPC has not been exercised on this host"
+                "not_run",
+                "Token streaming is available through ACP session turns; no turn has run on this host",
             ),
             "tools": RuntimeCapability(
                 "not_run", "No authentic Hermes tool call has been executed on this host"
             ),
             "approvals": RuntimeCapability(
-                "not_run", "No Hermes approval round-trip has been executed on this host"
+                "not_run",
+                "No Hermes approval round-trip has been executed on this host; "
+                "the Hub rejects permission requests",
             ),
         }
         return RuntimeProbe(

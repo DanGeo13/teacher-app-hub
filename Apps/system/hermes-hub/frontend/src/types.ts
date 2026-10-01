@@ -66,6 +66,26 @@ export interface RuntimeState {
   qwen: RuntimeProbe
 }
 
+export type HermesSessionStatus = 'connecting' | 'active' | 'failed'
+
+export interface HermesSessionRecord {
+  id: string
+  hermesSessionId: string | null
+  status: HermesSessionStatus
+  transport: 'acp-stdio'
+  protocolVersion: number | null
+  agentName: string | null
+  agentVersion: string | null
+  model: string | null
+  provider: string | null
+  executable: string | null
+  messageCount: number
+  createdAt: string
+  updatedAt: string
+  lastStopReason: string | null
+  lastError: string | null
+}
+
 export interface SessionState {
   authenticated: boolean
   actor?: string

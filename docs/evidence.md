@@ -146,3 +146,13 @@ Candidate references have been identified, but no script, deployment, Google ide
 | CI boundary | Chromium is installed with pinned Playwright system dependencies. CI runs only synthetic backend/browser validation, uploads failure PNGs for seven days, disables trace/video, and has read-only contents permission. It never runs Hermes/Ollama, enables external-write brokers, implements approval expiry or migration checksums, or changes Codespaces state. |
 | Local verification | Backend 26 passed; frontend tests 3 passed; TypeScript and Vite build passed; secret scan, npm audit and pip check passed; Playwright discovery lists exactly four tests. Executable browser run is pending the CI Chromium job because this host could not download Chromium. |
 | Codespaces boundary | `docs/setup.md` contains validation-only commands and explicitly prohibits automatic rebuild, migration, cleanup, broker enablement or port-visibility changes. |
+
+## E14 — Minimal authentic Hermes session integration
+
+| Field | Record |
+|---|---|
+| Exact action | Drive the installed Hermes executable over the documented ACP v1 stdio protocol: `initialize`, `session/new`, `session/prompt`, `session/resume`; stream one real user message per request as SSE; persist session references (id, timestamps, agent/model/provider metadata, stop reason/error) with no message content; reject tool-permission requests fail-closed |
+| Real-instance verification | `hermes-agent[acp]==0.19.0` installed from PyPI; `hermes acp --check` OK. Integration tests (`tests/backend/test_hermes_integration.py`) against the real binary: new-session stream and follow-up resume turn **both passed** with a synthetic local OpenAI-compatible endpoint standing in for Ollama (no external service). Without a provider configured, the same tests verified the honest refusal state (failed reference + agent remediation) before skipping BLOCKED. |
+| Without the executable | Both integration tests self-skip BLOCKED with the exact remedy (`HUB_TEST_HERMES_EXECUTABLE`); no session is simulated. Adapter and service behaviour is covered by the synthetic-agent unit/HTTP suite. |
+| Local verification | Backend 50 passed (incl. both real-Hermes integration tests) / 48 passed + 2 BLOCKED skips without Hermes; frontend typecheck, vitest (4) and Vite build passed. |
+| Boundary | No orchestration, no Hermes-internal state access, no external writes, no UI beyond a read-only session-reference card on Maintenance. |

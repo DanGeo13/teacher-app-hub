@@ -1,4 +1,4 @@
-import type { ApiErrorShape, AppInput, AppRecord, HubName, RuntimeState, SessionState } from './types'
+import type { ApiErrorShape, AppInput, AppRecord, HermesSessionRecord, HubName, RuntimeState, SessionState } from './types'
 
 let csrfToken: string | null = null
 export const SESSION_EXPIRED_EVENT = 'hermes:session-expired'
@@ -102,6 +102,10 @@ export function reorderApps(hub: HubName, apps: AppRecord[]): Promise<AppRecord[
 
 export function getRuntime(): Promise<RuntimeState> {
   return request('/api/runtime')
+}
+
+export function listHermesSessions(): Promise<HermesSessionRecord[]> {
+  return request('/api/hermes/sessions')
 }
 
 export function createLocalBackup(): Promise<{ filename: string; sha256: string; createdAt: string }> {
