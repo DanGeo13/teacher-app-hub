@@ -12,9 +12,13 @@ FastAPI Hub (default 9120)
    |-- registry / audit / approvals ---> Hub SQLite (HUB_DATA_DIR)
    |-- local snapshot -----------------> HUB_DATA_DIR/backups
    |-- Hermes adapter --read only------> official dashboard (default 9119)
-   `-- Ollama adapter --read only------> Ollama loopback (default 11434)
+   |-- Ollama adapter --read only------> Ollama loopback (default 11434)
+   |-- /api/hermes/session* --one user message per request--->
+   |       hermes_sessions.py (references + turn lock) --> hermes_acp.py (ACP v1 stdio)
+   |                                                          `-- hermes acp subprocess
+   `-- session references (no message content) -------> Hub SQLite
 
-Official Hermes dashboard remains separate. Hermes-owned state is not opened by the Hub.
+Official Hermes dashboard remains separate. Hermes-owned state (~/.hermes) is not opened by the Hub.
 ```
 
 ## Trust boundaries

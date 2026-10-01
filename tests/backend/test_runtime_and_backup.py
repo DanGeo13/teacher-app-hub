@@ -56,4 +56,4 @@ def test_backup_cleanup_retains_only_recent_snapshots(settings):
 def test_backend_health_and_migrations(client):
     response = client.get("/api/health")
     assert response.status_code == 200
-    assert response.json()["database"] == {"schemaVersion": 2, "integrity": "ok"}
+    assert response.json()["database"] == {"schemaVersion": 3, "integrity": "ok"}

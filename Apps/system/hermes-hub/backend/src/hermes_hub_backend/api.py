@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException, Query, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
@@ -15,6 +15,12 @@ from .auth import AuthService, AuthenticatedSession
 from .backup import BackupService
 from .database import Database
 from .errors import ApprovalError, ConflictError, NotFoundError
+from .hermes_acp import (
+    HermesIntegrationDisabledError,
+    HermesProtocolError,
+    HermesUnavailableError,
+)
+from .hermes_sessions import HermesSessionService
 from .models import (
     AppCreate,
     AppRecord,
@@ -23,6 +29,8 @@ from .models import (
     ApprovalCreate,
     ApprovalRecord,
     BackupRecord,
+    HermesMessageRequest,
+    HermesSessionRecord,
     LoginRequest,
     ReorderRequest,
     SessionResponse,
@@ -41,6 +49,7 @@ def create_app(settings: Settings) -> FastAPI:
     approvals = ApprovalService(database)
     audit = AuditService(database)
     backups = BackupService(database, settings.backup_dir)
+    hermes_sessions = HermesSessionService(database, settings)
 
     app = FastAPI(
         title="Hermes Hub API",
@@ -55,6 +64,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.registry = registry
     app.state.approvals = approvals
     app.state.backups = backups
+    app.state.hermes_sessions = hermes_sessions
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -262,6 +272,92 @@ def create_app(settings: Settings) -> FastAPI:
     @router.post("/backups/local", response_model=BackupRecord, status_code=201)
     def local_backup(_session: AuthenticatedSession = Depends(require_csrf)):
         return backups.create_snapshot()
+
+    @router.post("/hermes/session")
+    async def create_hermes_session(
+        value: HermesMessageRequest,
+        session: AuthenticatedSession = Depends(require_csrf),
+    ):
+        """Start a Hermes ACP session and stream one user message turn."""
+        try:
+            conversation = await hermes_sessions.open_new(value.message, session.actor)
+        except HermesIntegrationDisabledError as error:
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "HERMES_INTEGRATION_DISABLED", "message": str(error)},
+            ) from error
+        except HermesUnavailableError as error:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "HERMES_UNAVAILABLE",
+                    "message": str(error),
+                    "diagnostics": error.diagnostics.to_dict(),
+                },
+            ) from error
+        except HermesProtocolError as error:
+            # The agent itself refused (for example no provider is configured);
+            # surface its own remediation instead of a simulated session.
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "HERMES_SESSION_REFUSED",
+                    "message": str(error),
+                    "agentError": {"code": error.code, "data": error.data},
+                },
+            ) from error
+        return StreamingResponse(
+            hermes_sessions.stream_events(conversation),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.post("/hermes/session/{session_id}/message")
+    async def send_hermes_message(
+        session_id: str,
+        value: HermesMessageRequest,
+        _session: AuthenticatedSession = Depends(require_csrf),
+    ):
+        """Continue a persisted Hermes session with one streamed user message."""
+        try:
+            conversation = await hermes_sessions.open_existing(
+                session_id, value.message, _session.actor
+            )
+        except HermesIntegrationDisabledError as error:
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "HERMES_INTEGRATION_DISABLED", "message": str(error)},
+            ) from error
+        except HermesUnavailableError as error:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "HERMES_UNAVAILABLE",
+                    "message": str(error),
+                    "diagnostics": error.diagnostics.to_dict(),
+                },
+            ) from error
+        except HermesProtocolError as error:
+            # The agent itself refused (for example no provider is configured);
+            # surface its own remediation instead of a simulated session.
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "code": "HERMES_SESSION_REFUSED",
+                    "message": str(error),
+                    "agentError": {"code": error.code, "data": error.data},
+                },
+            ) from error
+        return StreamingResponse(
+            hermes_sessions.stream_events(conversation),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/hermes/sessions", response_model=list[HermesSessionRecord])
+    def list_hermes_sessions(_session: AuthenticatedSession = Depends(require_session)):
+        """Read-only session references for diagnostics; never message content."""
+        return hermes_sessions.list()
 
     @router.post("/restricted-actions/{action}")
     def restricted_action(
