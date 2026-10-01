@@ -1,0 +1,6 @@
+{
+  "$schema": "../packages/shared-schemas/agents-registry.schema.json",
+  "schemaVersion": 1,
+  "status": "planned",
+  "agents": []
+}

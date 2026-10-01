@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teacher-app-hub.local/schemas/app.schema.json",
+  "title": "Hermes Hub application",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "hub", "title", "description", "category", "tags", "icon", "launchUrl", "integrationMode", "authenticationRequirements", "aiAdapterSupport", "healthStatus", "displayOrder", "archived", "revision", "createdAt", "updatedAt"],
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "hub": { "enum": ["teaching", "personal"] },
+    "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "description": { "type": "string", "maxLength": 1000 },
+    "category": { "type": "string", "minLength": 1, "maxLength": 80 },
+    "tags": { "type": "array", "maxItems": 20, "uniqueItems": true, "items": { "type": "string", "maxLength": 32 } },
+    "icon": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "projectPath": { "type": ["string", "null"], "pattern": "^Apps/" },
+    "launchUrl": { "type": "string", "format": "uri", "pattern": "^https?://" },
+    "developmentUrl": { "type": ["string", "null"], "format": "uri" },
+    "integrationMode": { "enum": ["external_link", "embedded_legacy", "hub_aware"] },
+    "authenticationRequirements": { "type": "string", "maxLength": 500 },
+    "themeAdapterVersion": { "type": ["string", "null"], "maxLength": 40 },
+    "aiAdapterSupport": { "type": "boolean" },
+    "healthStatus": { "enum": ["unknown", "healthy", "degraded", "unavailable"] },
+    "displayOrder": { "type": "integer", "minimum": 0 },
+    "scriptId": { "type": ["string", "null"], "maxLength": 160 },
+    "deploymentId": { "type": ["string", "null"], "maxLength": 220 },
+    "archived": { "type": "boolean" },
+    "revision": { "type": "integer", "minimum": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  }
+}

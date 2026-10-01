@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://teacher-app-hub.local/schemas/hub-protocol-v1.schema.json",
+  "title": "Hermes Hub cooperative app message",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "type", "appId", "requestId", "payload"],
+  "properties": {
+    "protocolVersion": { "const": "1.0" },
+    "type": { "enum": ["HUB_READY", "APP_READY", "THEME_SYNC", "THEME_APPLIED", "HEIGHT_CHANGED", "AI_REQUEST", "AI_RESPONSE", "AI_ERROR"] },
+    "appId": { "type": "string", "format": "uuid" },
+    "requestId": { "type": "string", "minLength": 8, "maxLength": 128 },
+    "payload": { "type": "object" }
+  }
+}
