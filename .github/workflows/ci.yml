@@ -24,7 +24,19 @@ jobs:
       - run: npm --prefix Apps/system/hermes-hub/frontend run build
       - name: Install pinned Chromium and Linux dependencies
         working-directory: Apps/system/hermes-hub/frontend
-        run: npx playwright install --with-deps chromium
+        # The Playwright CDN intermittently resets connections (ECONNRESET).
+        # Retry a bounded number of times so a transient network failure does
+        # not fail the browser gate for reasons unrelated to the application.
+        run: |
+          for attempt in 1 2 3; do
+            if npx playwright install --with-deps chromium; then
+              exit 0
+            fi
+            echo "Chromium download attempt ${attempt} failed; retrying after backoff."
+            sleep $((attempt * 15))
+          done
+          echo "Chromium installation failed after 3 attempts." >&2
+          exit 1
       - name: Run isolated synthetic browser validation
         run: npm --prefix Apps/system/hermes-hub/frontend run test:e2e
       - name: Upload browser failure screenshots only

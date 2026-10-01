@@ -8,6 +8,15 @@ export default defineConfig({
   outputDir: 'test-results',
   use: {
     baseURL: 'http://127.0.0.1:9121',
+    // The app's service worker claims clients on activation, and App.tsx reloads
+    // the page on `controllerchange`. Each test opens a fresh context, so that
+    // forced reload fires mid-test (~150-500ms in) and races with sign-in: when
+    // it lands between filling the password and the login response, the field is
+    // wiped and the session is never established. Blocking service-worker
+    // registration removes that non-deterministic reload; the worker's caching
+    // policy stays covered by src/service-worker-policy.test.ts and
+    // tests/backend/test_service_worker_policy.py.
+    serviceWorkers: 'block',
     screenshot: 'only-on-failure',
     trace: 'off',
     video: 'off',
