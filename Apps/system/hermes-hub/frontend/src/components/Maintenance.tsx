@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { createLocalBackup, listHermesSessions } from '../api'
+import { redactDisplayText } from '../redaction'
 import type { HermesSessionRecord, RuntimeState } from '../types'
 import { StatusBadge } from './StatusBadge'
 
@@ -36,7 +37,7 @@ export function Maintenance({ runtime, onRefresh }: Props) {
         {sessions && sessions.length > 0 && <ul className="capability-list">{sessions.map((session) => <li key={session.id}>
           <span>{session.model ?? 'model not reported'}</span>
           <span className={`capability capability--${session.status === 'active' ? 'verified' : session.status === 'failed' ? 'unsupported' : 'unknown'}`}>{session.status}</span>
-          <small>{session.provider ?? 'unknown provider'} · {session.agentName ?? 'agent'} {session.agentVersion ?? ''} · {session.messageCount} message{session.messageCount === 1 ? '' : 's'} · {new Date(session.createdAt).toLocaleString('en-AU')}{session.lastError ? ` · ${session.lastError}` : ''}</small>
+          <small>{session.provider ?? 'unknown provider'} · {session.agentName ?? 'agent'} {session.agentVersion ?? ''} · {session.messageCount} message{session.messageCount === 1 ? '' : 's'} · {new Date(session.createdAt).toLocaleString('en-AU')}{session.lastError ? ` · ${redactDisplayText(session.lastError)}` : ''}</small>
         </li>)}</ul>}
       </article>
       <article className="maintenance-card"><div className="maintenance-card__head"><h2>Local backup</h2><span className="status">workspace only</span></div><p>Create a consistent SQLite snapshot using the online backup API. This does not protect against Codespace deletion.</p><button className="button button--primary" disabled={busy} onClick={() => void backup()}>{busy ? 'Creating snapshot…' : 'Create local snapshot'}</button>{backupMessage && <p className="result-message" role="status">{backupMessage}</p>}</article>

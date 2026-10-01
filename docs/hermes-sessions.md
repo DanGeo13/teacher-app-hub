@@ -32,6 +32,21 @@ FastAPI Hub
 - `hermes_sessions.py` owns persistence and policy: one turn at a time per
   session (409 `HERMES_SESSION_BUSY` otherwise), `hermes_sessions` table rows,
   audit events, and the SSE mapping.
+- Every way a session attempt or turn can end abnormally — a handshake/
+  session/resume failure, an unwrapped timeout, a cancelled request (the
+  browser disconnects), or an unexpected error — releases the per-session
+  turn lock and terminates the spawned Hermes subprocess. This is enforced in
+  two places: `open_new`/`open_existing` in `hermes_sessions.py` catch
+  `BaseException` (not just the two anticipated `Hermes*` error types)
+  around the handshake/`session/new`/`session/resume` calls, and
+  `stream_events` closes the client inside the *same* `finally` block that
+  covers the very first SSE event, not only the prompt-streaming loop — a
+  disconnect arriving between those two points still gets cleaned up. See
+  `tests/backend/test_hermes_sessions.py::test_session_new_timeout_releases_lock_and_closes_process`,
+  `::test_cancelled_open_new_releases_lock_and_closes_process` and
+  `::test_browser_disconnect_mid_stream_releases_lock_and_closes_process` for
+  the regression coverage (the last of those failed before the fix: the
+  subprocess stayed alive even though the lock was released).
 - Hermes-owned state (its own `~/.hermes/state.db`, checkpoints, secrets) is
   **never opened** by the Hub. The Hub stores only references and metadata.
 - The Hermes subprocess is launched with a **curated environment**, not the
@@ -50,8 +65,31 @@ FastAPI Hub
 
 ## Configuration
 
+### Live execution is opt-in, not on by default
+
+`HUB_HERMES_ENABLED` defaults to `false`. While disabled, `POST
+/api/hermes/session` and `POST /api/hermes/session/{id}/message` never start
+a subprocess and never create a session reference — they return an explicit
+**503 `HERMES_INTEGRATION_DISABLED`** state immediately. `GET
+/api/hermes/sessions` still works (it only reads existing references).
+
+Set `HUB_HERMES_ENABLED=true` to opt in, and only on a developer account:
+
+- This starts a real `hermes acp` subprocess under the Hub's own OS user.
+  **Enabling it is not equivalent to OS-level sandboxing** — there is no
+  container, chroot, seccomp profile or filesystem namespace around that
+  process. See [known-limitations.md](known-limitations.md).
+- Never point an enabled adapter at school data, production credentials, or
+  anything with access to privileged tools. Use a disposable developer
+  workspace and a model provider that has nothing but synthetic/test data
+  behind it.
+- Synthetic/CI tests enable it explicitly and only inside isolated,
+  throwaway fixtures (a temporary `tmp_path` workspace and a fake or
+  disposable real agent) — never by changing the server-wide default.
+
 | Variable | Default | Meaning |
 |---|---|---|
+| `HUB_HERMES_ENABLED` | `false` | Opt-in gate for launching any Hermes subprocess at all. See above. |
 | `HERMES_EXECUTABLE` | `hermes` | Hermes executable to launch for `hermes acp`. An absolute path is recommended when Hermes lives in a virtual environment. |
 | `HUB_HERMES_WORKSPACE_DIR` | `$HUB_DATA_DIR/hermes-workspace` | Working directory passed as the ACP session `cwd`. |
 | `HUB_HERMES_STARTUP_TIMEOUT_SECONDS` | `30` | Handshake budget for `initialize`. Real Hermes can take over a minute on a cold start — raise this on slow hosts. |
@@ -96,12 +134,22 @@ through this endpoint.
 
 | Response | Code | When |
 |---|---|---|
-| 503 | `HERMES_UNAVAILABLE` | executable missing/not executable, handshake timeout, or the process died before/during the turn. `diagnostics` carries executable, argv, exit code and stderr tail. |
-| 503 | `HERMES_SESSION_REFUSED` | Hermes itself answered with a JSON-RPC error (typically: **no model provider configured**). `agentError` carries the agent's own error code and data — including Hermes' remediation message. |
+| 503 | `HERMES_INTEGRATION_DISABLED` | `HUB_HERMES_ENABLED` is not `true` (the default). No subprocess is started and **no session reference is created** — nothing was attempted. |
+| 503 | `HERMES_UNAVAILABLE` | executable missing/not executable, handshake timeout, or the process died before/during the turn. `diagnostics` carries executable, argv, exit code and a redacted stderr tail. |
+| 503 | `HERMES_SESSION_REFUSED` | Hermes itself answered with a JSON-RPC error (typically: **no model provider configured**). `agentError` carries the agent's own (redacted) error code and data — including Hermes' remediation message. |
 | 409 | `HERMES_SESSION_BUSY` | a turn is already active for this session. |
 
-Failed attempts still create a session reference with `status: "failed"` and a
-`lastError` string, so the record is honest about what was attempted.
+Failed attempts (`HERMES_UNAVAILABLE`/`HERMES_SESSION_REFUSED`) still create a
+session reference with `status: "failed"` and a `lastError` string, so the
+record is honest about what was attempted. `HERMES_INTEGRATION_DISABLED` is
+different: since nothing was attempted, no reference is created at all.
+
+**Diagnostic text is redacted, not raw.** `diagnostics.stderrTail`,
+`agentError.data`, and the persisted `lastError` all pass through a
+best-effort credential/token scrubber (`hermes_hub_backend/redaction.py`)
+before they reach any HTTP response, the database, or the audit log — see
+[known-limitations.md](known-limitations.md) for what that does and does not
+guarantee.
 
 ### SSE event stream
 
@@ -181,7 +229,20 @@ including the audit log. Audit events: `hermes.session.created`,
    Or hand-write `~/.hermes/config.yaml` with a `custom_providers` entry whose
    `base_url` points at your Ollama/OpenAI-compatible endpoint.
 
-3. Point the Hub at the executable and start it:
+3. Before pointing the Hub at it, optionally run the read-only preflight to
+   confirm what is actually on this host — it never starts a Hermes session
+   (no `session/new`/`session/resume`/`session/prompt`) and never pulls or
+   switches a model, it only reports the executable version, the ACP
+   capabilities advertised by the real `initialize` handshake, Ollama
+   reachability and installed model names, whether Hermes' own state
+   directory exists, and the Hub's own HTTPS/auth-relevant configuration:
+
+   ```bash
+   cd Apps/system/hermes-hub/backend
+   .venv/bin/python3 ../../../../scripts/hermes-preflight.py
+   ```
+
+4. Point the Hub at the executable and start it:
 
    ```bash
    export HERMES_EXECUTABLE=/path/to/hermes-venv/bin/hermes
@@ -190,7 +251,7 @@ including the audit log. Audit events: `hermes.session.created`,
    .venv/bin/uvicorn hermes_hub_backend.api:app --port 9120
    ```
 
-4. Log in through the frontend, obtain the CSRF token, and stream one session:
+5. Log in through the frontend, obtain the CSRF token, and stream one session:
 
    ```bash
    curl -c jar.txt -o login.json -X POST http://127.0.0.1:9120/api/auth/login \

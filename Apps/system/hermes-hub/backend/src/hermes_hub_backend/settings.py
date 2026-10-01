@@ -73,6 +73,12 @@ class Settings:
     allowed_origins: tuple[str, ...] = ()
     session_ttl_seconds: int = 43_200
     hermes_dashboard_url: str = "http://127.0.0.1:9119"
+    #: Off by default: launching a real Hermes subprocess is opt-in. When
+    #: False, /api/hermes/session and /api/hermes/session/{id}/message return
+    #: an explicit HERMES_INTEGRATION_DISABLED state instead of starting a
+    #: process. See docs/hermes-sessions.md — enabling this on a developer
+    #: account is NOT equivalent to OS-level sandboxing of the agent process.
+    hermes_enabled: bool = False
     hermes_executable: str = "hermes"
     hermes_workspace_dir: Path | None = None
     hermes_startup_timeout_seconds: float = 30.0
@@ -131,6 +137,7 @@ class Settings:
             allowed_origins=origins,
             session_ttl_seconds=session_ttl,
             hermes_dashboard_url=os.getenv("HERMES_DASHBOARD_URL", "http://127.0.0.1:9119"),
+            hermes_enabled=_bool_env("HUB_HERMES_ENABLED", False),
             hermes_executable=os.getenv("HERMES_EXECUTABLE", "hermes"),
             hermes_workspace_dir=hermes_workspace,
             hermes_startup_timeout_seconds=hermes_startup_timeout,

@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .redaction import redact_json, redact_text
 
 #: ACP major protocol version this client speaks. The agent's negotiated
 #: response is recorded in the session reference and never assumed to match.
@@ -47,13 +48,25 @@ _NOTIFICATION_QUEUE_LIMIT = 4_096
 
 @dataclass(frozen=True, slots=True)
 class HermesDiagnostics:
-    """Structured, secret-free explanation of why Hermes is unusable."""
+    """Explanation of why Hermes is unusable, redacted at construction time.
+
+    ``reason`` and ``stderr_tail`` can both carry text that ultimately comes
+    from the Hermes process, its provider, or a nested protocol error — not
+    from the Hub. Both are passed through :func:`redact_text` as soon as the
+    dataclass is built (not only when serialised) so every consumer, present
+    and future, sees already-sanitised text. This is a best-effort pattern
+    match, not a guarantee; see redaction.py.
+    """
 
     reason: str
     executable: str
     command: list[str] = field(default_factory=list)
     exit_code: int | None = None
     stderr_tail: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "reason", redact_text(self.reason) or "")
+        object.__setattr__(self, "stderr_tail", redact_text(self.stderr_tail) or "")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -73,17 +86,46 @@ class HermesUnavailableError(RuntimeError):
         super().__init__(f"Hermes is unavailable: {diagnostics.reason}")
 
 
+class HermesIntegrationDisabledError(RuntimeError):
+    """The Hermes session integration is turned off by server-side policy.
+
+    Raised before any subprocess is started and before any session reference
+    is created — this is a deliberate, off-by-default gate
+    (``HUB_HERMES_ENABLED``), never a runtime failure. Enabling the setting
+    only starts a local ``hermes acp`` process under the Hub's own OS user;
+    it is not equivalent to OS-level sandboxing (container, chroot, seccomp,
+    or a restricted filesystem namespace) and must not be pointed at school
+    data, production credentials or privileged tools. See
+    docs/hermes-sessions.md and docs/known-limitations.md.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Hermes session integration is disabled on this Hub. Set "
+            "HUB_HERMES_ENABLED=true to opt in on a developer account only "
+            "(see docs/hermes-sessions.md); this is not a substitute for "
+            "OS-level sandboxing."
+        )
+
+
 class HermesProtocolError(RuntimeError):
-    """The Hermes agent answered a request with a JSON-RPC error."""
+    """The Hermes agent answered a request with a JSON-RPC error.
+
+    ``message`` and ``data`` are agent-controlled text; both are redacted at
+    construction time (see ``redaction.py``) so ``str(error)`` and ``.data``
+    are already safe wherever this exception is persisted, audited, or
+    returned over HTTP/SSE.
+    """
 
     def __init__(self, code: int, message: str, data: Any = None) -> None:
         self.code = code
-        self.data = data
+        message = redact_text(message) or ""
+        self.data = redact_json(data)
         details = ""
-        if isinstance(data, dict) and isinstance(data.get("details"), str):
-            details = f" ({data['details']})"
-        elif isinstance(data, str) and data:
-            details = f" ({data})"
+        if isinstance(self.data, dict) and isinstance(self.data.get("details"), str):
+            details = f" ({self.data['details']})"
+        elif isinstance(self.data, str) and self.data:
+            details = f" ({self.data})"
         super().__init__(f"Hermes ACP error {code}: {message}{details}")
 
 
@@ -366,11 +408,14 @@ class AcpHermesClient:
     # -- ACP methods -------------------------------------------------------
 
     async def new_session(self) -> AcpSessionInfo:
-        result = await self._request(
-            "session/new",
-            {"cwd": str(self._workspace_dir), "mcpServers": []},
-            timeout=self._startup_timeout,
-        )
+        try:
+            result = await self._request(
+                "session/new",
+                {"cwd": str(self._workspace_dir), "mcpServers": []},
+                timeout=self._startup_timeout,
+            )
+        except asyncio.TimeoutError as error:
+            raise self._timeout_as_unavailable("session/new", error) from error
         session_id = result.get("sessionId")
         if not isinstance(session_id, str) or not session_id:
             raise HermesProtocolError(-32603, "agent returned no sessionId for session/new")
@@ -399,13 +444,35 @@ class AcpHermesClient:
                 "agent does not advertise sessionCapabilities.resume; "
                 "refusing to call session/resume",
             )
-        result = await self._request(
-            "session/resume",
-            {"sessionId": session_id, "cwd": str(self._workspace_dir), "mcpServers": []},
-            timeout=self._startup_timeout,
-        )
+        try:
+            result = await self._request(
+                "session/resume",
+                {"sessionId": session_id, "cwd": str(self._workspace_dir), "mcpServers": []},
+                timeout=self._startup_timeout,
+            )
+        except asyncio.TimeoutError as error:
+            raise self._timeout_as_unavailable("session/resume", error) from error
         self._drain_notifications()
         return parse_model_state(result)
+
+    def _timeout_as_unavailable(
+        self, method: str, error: asyncio.TimeoutError
+    ) -> HermesUnavailableError:
+        """Turn a bare asyncio.TimeoutError from ``_request`` into the same
+        honest, structured :class:`HermesUnavailableError` shape ``start()``
+        raises on a handshake timeout — ``open_new``/``open_existing`` only
+        know how to clean up (release the turn lock, close the process, mark
+        the session reference failed) for Hermes* exception types, not a bare
+        asyncio.TimeoutError.
+        """
+        return HermesUnavailableError(
+            HermesDiagnostics(
+                reason=f"Hermes did not respond to {method} within {self._startup_timeout:g}s",
+                executable=self._executable,
+                exit_code=self._process.returncode if self._process else None,
+                stderr_tail=self.stderr_tail(),
+            )
+        )
 
     async def stream_prompt(self, session_id: str, message: str):
         """Run one prompt turn, yielding :class:`TurnEvent` objects until done.

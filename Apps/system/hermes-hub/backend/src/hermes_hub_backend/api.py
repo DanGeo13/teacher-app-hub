@@ -15,7 +15,11 @@ from .auth import AuthService, AuthenticatedSession
 from .backup import BackupService
 from .database import Database
 from .errors import ApprovalError, ConflictError, NotFoundError
-from .hermes_acp import HermesProtocolError, HermesUnavailableError
+from .hermes_acp import (
+    HermesIntegrationDisabledError,
+    HermesProtocolError,
+    HermesUnavailableError,
+)
 from .hermes_sessions import HermesSessionService
 from .models import (
     AppCreate,
@@ -277,6 +281,11 @@ def create_app(settings: Settings) -> FastAPI:
         """Start a Hermes ACP session and stream one user message turn."""
         try:
             conversation = await hermes_sessions.open_new(value.message, session.actor)
+        except HermesIntegrationDisabledError as error:
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "HERMES_INTEGRATION_DISABLED", "message": str(error)},
+            ) from error
         except HermesUnavailableError as error:
             raise HTTPException(
                 status_code=503,
@@ -314,6 +323,11 @@ def create_app(settings: Settings) -> FastAPI:
             conversation = await hermes_sessions.open_existing(
                 session_id, value.message, _session.actor
             )
+        except HermesIntegrationDisabledError as error:
+            raise HTTPException(
+                status_code=503,
+                detail={"code": "HERMES_INTEGRATION_DISABLED", "message": str(error)},
+            ) from error
         except HermesUnavailableError as error:
             raise HTTPException(
                 status_code=503,

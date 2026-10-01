@@ -50,6 +50,9 @@ def _settings(tmp_path: Path, executable: str) -> Settings:
         admin_password=PASSWORD,
         cookie_secure=False,
         allowed_origins=("http://127.0.0.1:9121",),
+        # Real-Hermes integration tests explicitly opt in; the server-side
+        # default is disabled (see HermesIntegrationDisabledError).
+        hermes_enabled=True,
         hermes_executable=executable,
         hermes_workspace_dir=tmp_path / "workspace",
         # A real agent build is slow; give it room but keep it bounded.

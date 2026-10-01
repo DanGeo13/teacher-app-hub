@@ -24,11 +24,13 @@ from .database import Database
 from .errors import ConflictError, NotFoundError
 from .hermes_acp import (
     AcpHermesClient,
+    HermesIntegrationDisabledError,
     HermesProtocolError,
     HermesUnavailableError,
     parse_model_state,
 )
 from .models import HermesSessionRecord
+from .redaction import redact_text
 from .runtime import OllamaAdapter
 from .settings import Settings
 from .time import iso_now
@@ -125,6 +127,13 @@ class HermesSessionStore:
             )
 
     def mark_failed(self, session_id: str, error: str) -> None:
+        """Persist a failure reason. ``error`` is redacted and capped here —
+
+        this is the single place Hermes/provider-originated error text enters
+        the database, so every caller gets the same sanitisation regardless
+        of which exception type produced the text.
+        """
+        safe_error = (redact_text(error) or "")[:_ERROR_SNIPPET]
         with self.database.write() as connection:
             connection.execute(
                 """
@@ -132,15 +141,20 @@ class HermesSessionStore:
                 SET status = 'failed', last_error = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (error[:_ERROR_SNIPPET], iso_now(), session_id),
+                (safe_error, iso_now(), session_id),
             )
 
     def record_turn(
         self, session_id: str, *, stop_reason: str | None, error: str | None
     ) -> None:
+        """Persist a turn outcome. ``error``, if present, is redacted here —
+
+        see :meth:`mark_failed`.
+        """
         now = iso_now()
+        safe_error = (redact_text(error) or "")[:_ERROR_SNIPPET] if error is not None else None
         with self.database.write() as connection:
-            if error is None:
+            if safe_error is None:
                 connection.execute(
                     """
                     UPDATE hermes_sessions
@@ -160,7 +174,7 @@ class HermesSessionStore:
                         status = 'failed', updated_at = ?
                     WHERE id = ?
                     """,
-                    (stop_reason, error[:_ERROR_SNIPPET], now, session_id),
+                    (stop_reason, safe_error, now, session_id),
                 )
 
 
@@ -234,7 +248,14 @@ class HermesSessionService:
         }
 
     async def open_new(self, message: str, actor: str) -> HermesConversation:
-        """Create a session reference and connect a fresh Hermes ACP process."""
+        """Create a session reference and connect a fresh Hermes ACP process.
+
+        Raises :class:`HermesIntegrationDisabledError` before touching the
+        store or starting any process when ``settings.hermes_enabled`` is
+        False (the default) — launching Hermes is opt-in.
+        """
+        if not self.settings.hermes_enabled:
+            raise HermesIntegrationDisabledError()
         record = self.store.create(self.settings.hermes_executable)
         # The id is freshly minted (uuid4) so this never contends, but
         # reserving it the same way as open_existing keeps exactly one release
@@ -246,9 +267,18 @@ class HermesSessionService:
                 client.start(), self._provider_context()
             )
             session = await client.new_session()
-        except (HermesUnavailableError, HermesProtocolError) as error:
+        except BaseException as error:
+            # Deliberately broad: a handshake/session-setup failure must
+            # always release the turn lock and terminate the spawned process
+            # — not only for the two Hermes* exception types we anticipate,
+            # but also an unwrapped asyncio.TimeoutError, a browser disconnect
+            # (asyncio.CancelledError when FastAPI cancels this request's
+            # task), or any other unexpected error. str(error) is redacted
+            # inside mark_failed() regardless of which of those this is.
             await client.aclose()
-            self.store.mark_failed(record.id, str(error))
+            self.store.mark_failed(
+                record.id, str(error) or "the request ended before the session finished starting"
+            )
             lock.release()
             raise
         self.store.mark_active(
@@ -287,7 +317,14 @@ class HermesSessionService:
     async def open_existing(
         self, hub_session_id: str, message: str, actor: str
     ) -> HermesConversation:
-        """Resume a persisted Hermes session in a fresh ACP process."""
+        """Resume a persisted Hermes session in a fresh ACP process.
+
+        Raises :class:`HermesIntegrationDisabledError` before touching the
+        store or starting any process when ``settings.hermes_enabled`` is
+        False (the default) — launching Hermes is opt-in.
+        """
+        if not self.settings.hermes_enabled:
+            raise HermesIntegrationDisabledError()
         record = self.store.get(hub_session_id)
         if record.hermes_session_id is None:
             raise ConflictError("session has no Hermes reference; create a new session")
@@ -298,9 +335,15 @@ class HermesSessionService:
                 client.start(), self._provider_context()
             )
             provider, model = await client.resume_session(record.hermes_session_id)
-        except (HermesUnavailableError, HermesProtocolError) as error:
+        except BaseException as error:
+            # See the matching comment in open_new(): deliberately broad so a
+            # resume failure of any kind (including an unwrapped
+            # asyncio.TimeoutError or a cancelled/disconnected request)
+            # always releases the turn lock and terminates the process.
             await client.aclose()
-            self.store.mark_failed(record.id, str(error))
+            self.store.mark_failed(
+                record.id, str(error) or "the request ended before the session finished resuming"
+            )
             lock.release()
             raise
         self.store.mark_active(
@@ -331,16 +374,24 @@ class HermesSessionService:
         """
         record = self.store.get(conversation.hub_session_id)
         try:
-            yield _sse(
-                "session",
-                {
-                    "session": record.model_dump(by_alias=True),
-                    "providerContext": conversation.provider_context,
-                },
-            )
             stop_reason: str | None = None
             error_text: str | None = None
             try:
+                # The initial "session" event must be inside this inner
+                # try/finally, not before it: a browser disconnect
+                # (GeneratorExit) arriving right after this first event is
+                # yielded — before the prompt stream even starts — must still
+                # reach the finally below and close the Hermes process. It
+                # previously sat outside this block, so that exact timing
+                # released the turn lock (the outer finally) but left the
+                # subprocess running.
+                yield _sse(
+                    "session",
+                    {
+                        "session": record.model_dump(by_alias=True),
+                        "providerContext": conversation.provider_context,
+                    },
+                )
                 assert conversation.hermes_session_id is not None
                 async for event in conversation.client.stream_prompt(
                     conversation.hermes_session_id, conversation.message
@@ -349,7 +400,10 @@ class HermesSessionService:
                     if event.type == "done":
                         stop_reason = event.data.get("stopReason")
             except HermesUnavailableError as error:
-                error_text = str(error)
+                # str(error) and diagnostics.to_dict() are already redacted at
+                # HermesDiagnostics construction time; redact_text() here is a
+                # harmless no-op safety net, not the primary control.
+                error_text = redact_text(str(error))
                 yield _sse(
                     "error",
                     {
@@ -358,7 +412,10 @@ class HermesSessionService:
                     },
                 )
             except Exception as error:  # ACP protocol failure or transport error
-                error_text = str(error)
+                # Not necessarily a Hermes* exception type (e.g. a transport
+                # or asyncio error) so it is not pre-redacted at construction;
+                # redact explicitly before it reaches the client or storage.
+                error_text = redact_text(str(error))
                 yield _sse("error", {"message": error_text})
             finally:
                 if error_text is None and stop_reason is None:

@@ -373,3 +373,54 @@ def test_handshake_timeout_closes_process(fake_hermes: str, monkeypatch):
     diagnostics, client = asyncio.run(scenario())
     assert "handshake" in diagnostics.reason
     assert client._process is None or client._process.returncode is not None
+
+
+def test_session_new_timeout_raises_unavailable_not_bare_timeout_error(
+    fake_hermes: str, monkeypatch
+):
+    """session/new must time out the same honest way the handshake does.
+
+    Before this fix, a bare asyncio.TimeoutError escaped new_session()
+    uncaught by HermesSessionService's (HermesUnavailableError,
+    HermesProtocolError) except clause, leaking the turn lock and the
+    subprocess. The agent here completes initialize normally, then goes
+    silent on session/new.
+    """
+    monkeypatch.setenv("FAKE_HERMES_SILENT_SESSION_NEW", "1")
+
+    async def scenario():
+        client = make_client(fake_hermes, startup_timeout_seconds=0.5)
+        try:
+            await client.start()
+            await client.new_session()
+        except HermesUnavailableError as error:
+            return error.diagnostics, client
+        finally:
+            await client.aclose()
+
+    diagnostics, client = asyncio.run(scenario())
+    assert "session/new" in diagnostics.reason
+    assert client._process is None or client._process.returncode is not None
+
+
+def test_session_resume_timeout_raises_unavailable_not_bare_timeout_error(
+    fake_hermes: str, monkeypatch
+):
+    """Same fix as session/new, applied to session/resume: a bare
+    asyncio.TimeoutError must not escape resume_session() uncaught."""
+    monkeypatch.setenv("FAKE_HERMES_SILENT_SESSION_RESUME", "1")
+
+    async def scenario():
+        client = make_client(fake_hermes, startup_timeout_seconds=0.5)
+        try:
+            await client.start()
+            await client.new_session()  # advertises resume capability
+            await client.resume_session("sess_fake_1")
+        except HermesUnavailableError as error:
+            return error.diagnostics, client
+        finally:
+            await client.aclose()
+
+    diagnostics, client = asyncio.run(scenario())
+    assert "session/resume" in diagnostics.reason
+    assert client._process is None or client._process.returncode is not None

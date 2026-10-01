@@ -66,7 +66,14 @@ def finish_turn(rid: str, stop_reason: str = "end_turn") -> None:
 def main() -> None:
     if os.environ.get("FAKE_HERMES_SILENT") == "1":
         # Stay alive but never speak: exercises the Hub's handshake timeout.
-        sys.stderr.write("fake-hermes stderr: silent mode\n")
+        # FAKE_HERMES_STDERR_CANARY lets a test assert that whatever this
+        # process writes to stderr (which the Hub captures verbatim as
+        # stderr_tail) is redacted before it reaches an HTTP/SSE response.
+        canary = os.environ.get("FAKE_HERMES_STDERR_CANARY")
+        if canary:
+            sys.stderr.write(f"fake-hermes stderr: silent mode; leaked={canary}\n")
+        else:
+            sys.stderr.write("fake-hermes stderr: silent mode\n")
         sys.stderr.flush()
         time.sleep(3600)
         return
@@ -141,7 +148,24 @@ def main() -> None:
                 }
             )
         elif method == "session/new":
+            if os.environ.get("FAKE_HERMES_SILENT_SESSION_NEW") == "1":
+                # Handshake completes normally, then this agent goes quiet
+                # instead of answering session/new: exercises the Hub's
+                # session/new timeout path (distinct from the handshake
+                # timeout, which FAKE_HERMES_SILENT covers).
+                time.sleep(3600)
+                continue
             if os.environ.get("FAKE_HERMES_REFUSE_SESSION") == "1":
+                # FAKE_HERMES_REFUSE_SESSION_SECRET lets a test assert that a
+                # credential-shaped string embedded in the agent's own error
+                # "data.details" (as a misbehaving provider might produce) is
+                # redacted before it reaches the agentError field of the
+                # HERMES_SESSION_REFUSED response.
+                details = os.environ.get("FAKE_HERMES_REFUSE_SESSION_SECRET") or (
+                    "No LLM provider configured. Run `hermes model` "
+                    "to select a provider, or run `hermes setup` "
+                    "for first-time configuration."
+                )
                 send(
                     {
                         "jsonrpc": "2.0",
@@ -149,13 +173,7 @@ def main() -> None:
                         "error": {
                             "code": -32603,
                             "message": "Internal error",
-                            "data": {
-                                "details": (
-                                    "No LLM provider configured. Run `hermes model` "
-                                    "to select a provider, or run `hermes setup` "
-                                    "for first-time configuration."
-                                )
-                            },
+                            "data": {"details": details},
                         },
                     }
                 )
@@ -175,6 +193,11 @@ def main() -> None:
                 }
             )
         elif method == "session/resume":
+            if os.environ.get("FAKE_HERMES_SILENT_SESSION_RESUME") == "1":
+                # Mirrors FAKE_HERMES_SILENT_SESSION_NEW for the resume path:
+                # exercises the Hub's session/resume timeout handling.
+                time.sleep(3600)
+                continue
             session_id = str(params.get("sessionId") or "sess_fake_1")
             send(
                 {
@@ -200,6 +223,20 @@ def main() -> None:
                         "jsonrpc": "2.0",
                         "id": rid,
                         "error": {"code": -32000, "message": "provider exploded"},
+                    }
+                )
+                continue
+            if text == "leak-secret":
+                # Lets a test assert that a credential-shaped string embedded
+                # in a mid-turn provider error is redacted before it reaches
+                # the SSE "error" event, the persisted last_error column, and
+                # the audit log entry.
+                secret = os.environ.get("FAKE_HERMES_TURN_SECRET", "token=CanaryTurnSecret111222333")
+                send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": rid,
+                        "error": {"code": -32000, "message": f"provider exploded: {secret}"},
                     }
                 )
                 continue

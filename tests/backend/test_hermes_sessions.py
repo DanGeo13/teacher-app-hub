@@ -35,6 +35,7 @@ def hermes_settings(tmp_path: Path, executable: str) -> Settings:
         admin_password=PASSWORD,
         cookie_secure=False,
         allowed_origins=(ORIGIN,),
+        hermes_enabled=True,
         hermes_executable=executable,
         hermes_workspace_dir=tmp_path / "workspace",
         hermes_startup_timeout_seconds=10.0,
@@ -175,6 +176,53 @@ def test_unavailable_hermes_is_an_honest_503(tmp_path: Path):
         assert "not found on PATH" in records[0]["lastError"]
 
 
+def test_hermes_integration_disabled_by_default_refuses_without_starting_anything(
+    tmp_path: Path, fake_hermes: str
+):
+    """HUB_HERMES_ENABLED defaults to False: launching Hermes is opt-in.
+
+    This uses a *working* fake agent (not a missing executable) to prove the
+    distinction from HERMES_UNAVAILABLE — the request is refused by policy
+    before any subprocess is attempted, and no session reference is created
+    at all (an unavailable attempt still creates a failed reference; a
+    disabled attempt does not, because nothing was attempted).
+    """
+    import dataclasses
+
+    settings = dataclasses.replace(hermes_settings(tmp_path, fake_hermes), hermes_enabled=False)
+    with TestClient(create_app(settings)) as client:
+        response = client.post(
+            "/api/auth/login", headers={"Origin": ORIGIN}, json={"password": PASSWORD}
+        )
+        headers = {"Origin": ORIGIN, "X-CSRF-Token": response.json()["csrfToken"]}
+        response = client.post(
+            "/api/hermes/session", headers=headers, json={"message": "hello"}
+        )
+        assert response.status_code == 503
+        detail = response.json()["detail"]
+        assert detail["code"] == "HERMES_INTEGRATION_DISABLED"
+        assert "HUB_HERMES_ENABLED" in detail["message"]
+
+        # Nothing was attempted, so there is no session reference at all —
+        # not even a "failed" one.
+        records = client.get("/api/hermes/sessions", headers={"Origin": ORIGIN}).json()
+        assert records == []
+
+        # The follow-up-message endpoint is refused the same way.
+        response = client.post(
+            "/api/hermes/session/does-not-matter/message",
+            headers=headers,
+            json={"message": "hello"},
+        )
+        assert response.status_code == 503
+        assert response.json()["detail"]["code"] == "HERMES_INTEGRATION_DISABLED"
+
+
+def test_default_settings_disable_hermes_integration():
+    """HUB_HERMES_ENABLED is not set by Settings' own dataclass default."""
+    assert Settings.__dataclass_fields__["hermes_enabled"].default is False
+
+
 def test_hermes_endpoints_require_authentication_and_csrf(hermes_client: TestClient):
     # Unauthenticated reads are refused before any login cookie exists.
     response = hermes_client.get("/api/hermes/sessions")
@@ -299,6 +347,129 @@ def test_turn_lock_is_held_before_any_subprocess_starts(tmp_path: Path, fake_her
     conflicts = [item for item in outcomes if isinstance(item, ConflictError)]
     assert len(successes) == 1
     assert len(conflicts) == 1
+
+
+def test_session_new_timeout_releases_lock_and_closes_process(
+    tmp_path: Path, fake_hermes: str, monkeypatch
+):
+    """A session/new timeout must be cleaned up like any other open_new()
+    failure: release the turn lock and terminate the subprocess. Before the
+    hardening in hermes_acp.py/hermes_sessions.py, a bare asyncio.TimeoutError
+    from session/new was not one of the two exception types open_new() caught,
+    so it propagated past the lock-release/aclose() cleanup entirely.
+    """
+    import dataclasses
+
+    from hermes_hub_backend.database import Database
+    from hermes_hub_backend.hermes_acp import HermesUnavailableError
+
+    monkeypatch.setenv("FAKE_HERMES_SILENT_SESSION_NEW", "1")
+    settings = dataclasses.replace(
+        hermes_settings(tmp_path, fake_hermes), hermes_startup_timeout_seconds=0.5
+    )
+    database = Database(settings.database_path)
+    service = HermesSessionService(database, settings)
+
+    async def scenario():
+        with pytest.raises(HermesUnavailableError) as excinfo:
+            await service.open_new("hello", "admin")
+        return excinfo.value
+
+    error = asyncio.run(scenario())
+    assert "session/new" in error.diagnostics.reason
+
+    records = service.store.list()
+    assert len(records) == 1
+    assert records[0].status == "failed"
+    assert "session/new" in (records[0].last_error or "")
+
+    # The lock for that session id must not still be held.
+    lock = service._turn_locks[records[0].id]
+    assert not lock.locked()
+
+    # And the turn slot is free, not stuck "busy": a follow-up attempt against
+    # the same row fails for a different, expected reason (session/new never
+    # produced a Hermes session id to resume) rather than ConflictError's
+    # "a message turn is already streaming for this session".
+    async def retry():
+        with pytest.raises(ConflictError, match="no Hermes reference"):
+            await service.open_existing(records[0].id, "hello again", "admin")
+
+    asyncio.run(retry())
+
+
+def test_cancelled_open_new_releases_lock_and_closes_process(
+    tmp_path: Path, fake_hermes: str, monkeypatch
+):
+    """A browser disconnect (request task cancellation) mid-handshake must
+    also release the turn lock and terminate the subprocess, not just the two
+    anticipated Hermes* exception types.
+    """
+    import dataclasses
+
+    from hermes_hub_backend.database import Database
+
+    # Silent agent: client.start()'s initialize request is left pending long
+    # enough for this test to cancel the task while it is awaiting that call.
+    monkeypatch.setenv("FAKE_HERMES_SILENT", "1")
+    settings = dataclasses.replace(
+        hermes_settings(tmp_path, fake_hermes), hermes_startup_timeout_seconds=10.0
+    )
+    database = Database(settings.database_path)
+    service = HermesSessionService(database, settings)
+
+    async def scenario():
+        task = asyncio.ensure_future(service.open_new("hello", "admin"))
+        await asyncio.sleep(0.2)  # let client.start() spawn the process and block on initialize
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    asyncio.run(scenario())
+
+    records = service.store.list()
+    assert len(records) == 1
+    assert records[0].status == "failed"
+
+    lock = service._turn_locks[records[0].id]
+    assert not lock.locked()
+
+
+def test_browser_disconnect_mid_stream_releases_lock_and_closes_process(
+    tmp_path: Path, fake_hermes: str
+):
+    """Simulates a browser disconnect: FastAPI's StreamingResponse closes the
+    stream_events async generator (GeneratorExit) when the HTTP client goes
+    away mid-turn. The already-held turn lock must be released and the Hermes
+    subprocess terminated, not left running/locked until the fake agent
+    eventually idles out on its own.
+    """
+    from hermes_hub_backend.database import Database
+
+    settings = hermes_settings(tmp_path, fake_hermes)
+    database = Database(settings.database_path)
+    service = HermesSessionService(database, settings)
+
+    async def scenario():
+        conversation = await service.open_new("hello", "admin")
+        generator = service.stream_events(conversation)
+        await generator.__anext__()  # the "session" SSE event; lock is held
+        assert conversation.lock.locked()
+        process = conversation.client._process
+        assert process is not None and process.returncode is None
+
+        # FastAPI calls this when the client disconnects mid-stream.
+        await generator.aclose()
+        return conversation, process
+
+    conversation, process = asyncio.run(scenario())
+    assert not conversation.lock.locked()
+    assert process.returncode is not None
+
+    records = service.store.list()
+    assert len(records) == 1
+    assert records[0].status == "failed"
+    assert "ended before a stop reason" in (records[0].last_error or "")
 
 
 def test_no_message_content_is_persisted(hermes_authenticated, tmp_path: Path):
