@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "agent": "atlas",
+  "description": "Single source of truth for what Atlas may do. Enforced in code by the atlas-hub MCP server, the approval engine and the startup policy check. Skills must not restate or change it.",
+  "levels": {
+    "autonomous": "May run without asking Dan. Creates only proposed or internal records and audit entries.",
+    "approval_required": "Runs only through execute_approved_action after Dan approves the exact payload on an authenticated human channel.",
+    "forbidden": "Never exposed to the model, never executable, startup fails if present."
+  },
+  "atlasHubTools": {
+    "autonomous": [
+      "list_obligations",
+      "get_record",
+      "search_vault",
+      "list_pending_approvals",
+      "get_system_health",
+      "get_check_status",
+      "get_skill",
+      "list_audio_queue",
+      "propose_bill",
+      "propose_car_service",
+      "propose_task",
+      "propose_status_change",
+      "propose_message_draft",
+      "record_evidence",
+      "log_check",
+      "collect_alerts",
+      "build_digest",
+      "submit_audio_extraction",
+      "log_suspicious_content",
+      "run_backup"
+    ],
+    "approval_required": [
+      "execute_approved_action"
+    ],
+    "forbidden": [
+      "approve_action",
+      "deny_action",
+      "reject_action",
+      "approve",
+      "deny",
+      "decide_approval",
+      "execute_sql",
+      "raw_sql",
+      "run_query",
+      "delete_record",
+      "merge_records",
+      "force_status",
+      "set_status",
+      "skip_evidence",
+      "change_connector_permissions",
+      "transfer_money"
+    ]
+  },
+  "actions": {
+    "autonomous": [
+      "create_proposed_record",
+      "record_evidence",
+      "advance_internal_status",
+      "send_reminder_to_dan",
+      "run_scheduled_check",
+      "write_audit_entry"
+    ],
+    "approval_required": [
+      "send_message",
+      "send_email",
+      "calendar_create",
+      "calendar_edit",
+      "convert_audio_proposal",
+      "confirm_paid",
+      "confirm_status",
+      "delete_record",
+      "merge_records",
+      "change_connector_permissions",
+      "external_purchase",
+      "external_booking",
+      "external_transfer"
+    ],
+    "forbidden": [
+      "move_money",
+      "access_banking_credentials",
+      "impersonate_dan",
+      "bypass_authentication",
+      "enable_hidden_recording",
+      "process_student_data"
+    ]
+  },
+  "hermes": {
+    "profile": "atlas",
+    "remotePlatforms": [
+      "telegram",
+      "api_server",
+      "cron"
+    ],
+    "allowedNativeToolsets": {
+      "telegram": [
+        "memory",
+        "cronjob"
+      ],
+      "api_server": [
+        "memory",
+        "cronjob"
+      ],
+      "cron": [
+        "memory"
+      ]
+    },
+    "allowedMcpServers": [
+      "atlas-hub",
+      "gmail_personal",
+      "gmail_work"
+    ],
+    "forbiddenToolsets": [
+      "terminal",
+      "process",
+      "file",
+      "browser",
+      "code_execution",
+      "delegation",
+      "computer_use",
+      "skills",
+      "messaging",
+      "kanban",
+      "project",
+      "homeassistant",
+      "debugging",
+      "coding",
+      "hermes-acp",
+      "hermes-api-server",
+      "hermes-cli"
+    ],
+    "forbiddenTools": [
+      "terminal",
+      "process",
+      "read_terminal",
+      "close_terminal",
+      "write_file",
+      "patch",
+      "read_file",
+      "search_files",
+      "execute_code",
+      "delegate_task",
+      "computer_use",
+      "skill_manage",
+      "send_message",
+      "browser_navigate",
+      "browser_click",
+      "browser_type",
+      "browser_cdp",
+      "ha_call_service",
+      "kanban_create"
+    ],
+    "platformsThatApplyDisabledToolsets": [
+      "telegram",
+      "cron",
+      "cli"
+    ],
+    "neverUseWithAtlasProfile": [
+      "acp"
+    ]
+  },
+  "mailConnectors": {
+    "readOnlyToolAllowlist": [
+      "search_threads",
+      "get_thread",
+      "get_message",
+      "list_labels"
+    ],
+    "forbiddenToolPatterns": [
+      "send",
+      "reply",
+      "forward",
+      "draft",
+      "trash",
+      "delete",
+      "spam",
+      "label_",
+      "update",
+      "create",
+      "modify",
+      "untrash"
+    ]
+  }
+}

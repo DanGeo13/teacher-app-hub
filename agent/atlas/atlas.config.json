@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "agent": "atlas",
+  "owner": "Dan",
+  "locale": {
+    "timezone": "Australia/Sydney",
+    "dateFormat": "DD/MM/YYYY",
+    "currency": "AUD",
+    "language": "en-AU"
+  },
+  "approvals": {
+    "defaultExpiryHours": 24,
+    "maxExpiryHours": 168,
+    "expiringSoonHours": 6
+  },
+  "alerts": {
+    "billDueWithinHours": 48,
+    "carServiceDueWithinDays": 14,
+    "carServiceDueWithinKm": 1000
+  },
+  "checks": {
+    "bill_check": {"expectedEveryMinutes": 1440, "staleAfterMinutes": 2880},
+    "car_check": {"expectedEveryMinutes": 1440, "staleAfterMinutes": 2880},
+    "evidence_match": {"expectedEveryMinutes": 30, "staleAfterMinutes": 120},
+    "audio_queue": {"expectedEveryMinutes": 15, "staleAfterMinutes": 120},
+    "weekly_digest": {"expectedEveryMinutes": 10080, "staleAfterMinutes": 10800},
+    "nightly_backup": {"expectedEveryMinutes": 1440, "staleAfterMinutes": 2880}
+  },
+  "audio": {
+    "unprocessedAfterMinutes": 120,
+    "lowConfidenceBelow": 0.6
+  },
+  "dataScopes": {
+    "studentOrSchoolData": {"enabled": false, "namedPurpose": null}
+  }
+}
