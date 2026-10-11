@@ -1,13 +1,43 @@
 {
   "schemaVersion": 1,
   "skills": {
+    "audio-action-capture": {
+      "sha256": "a0e2763ea7a63d0b7d6b3d1a6dc52430be25e6b01df5ad7c25edb6b0a592ec96",
+      "reviewedBy": null,
+      "reviewedOn": null
+    },
     "bill-and-payment-monitor": {
-      "sha256": "21510f9f897aad86f00e4ba98fe5ddcce6b5353749ce0044bcf098cbac7bbe42",
+      "sha256": "5e635fad94d50b90b0d6d4099c40fd7b4a6036283640db41146022e89fe0db49",
       "reviewedBy": null,
       "reviewedOn": null
     },
     "car-maintenance-tracker": {
       "sha256": "71480d7dfabcf4eac1a13e69a57a6eb1ff60352683ad7f4389d69d62765f2bde",
+      "reviewedBy": null,
+      "reviewedOn": null
+    },
+    "message-evidence-monitor": {
+      "sha256": "d0813848311a7e49100e1a2c43479bb47596dc2ce39f06cb3b4304acbc05fccd",
+      "reviewedBy": null,
+      "reviewedOn": null
+    },
+    "payment-assistant": {
+      "sha256": "c1e9933dd5fc96f8dcc5afc4ca77da89e00747e826882a6fc2d25270b12887d5",
+      "reviewedBy": null,
+      "reviewedOn": null
+    },
+    "social-relationship-assistant": {
+      "sha256": "63ca5bb4054702cb09b5ed5b9b667fa895b74b118f82eb93f9cdb54e9fad7bf4",
+      "reviewedBy": null,
+      "reviewedOn": null
+    },
+    "system-health-and-recovery": {
+      "sha256": "87a5c9aa0c4d01c87d9c1296b12ec4794a4940c7808f5f67269ad8d719958513",
+      "reviewedBy": null,
+      "reviewedOn": null
+    },
+    "weekly-what-matters-report": {
+      "sha256": "014c8fe8097fc213ffedb339dd1ca178219297f71ebf3b582b9167d6ed79ad24",
       "reviewedBy": null,
       "reviewedOn": null
     }

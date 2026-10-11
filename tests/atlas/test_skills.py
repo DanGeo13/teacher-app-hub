@@ -223,3 +223,161 @@ def test_car_skill_connector_failure(atlas):
                     source_account="gmail_personal")
     assert atlas.get_check_status("car_check")["state"] == "failed"
     assert any(a["kind"] == "check_failed" for a in atlas.collect_alerts()["alerts"])
+
+
+# --------------------------------------------------------------------------
+# payment-assistant
+# --------------------------------------------------------------------------
+
+
+def test_payment_assistant_records_dans_report_but_cannot_confirm(atlas, new_bill):
+    bill = new_bill()
+    report = atlas.record_evidence(source_account="telegram:dan", source_type="manual",
+                                   external_ref=f"dan-report:{bill['id']}:2026-10-12", action="payment_reported",
+                                   counterparty="Origin Energy", amount="182.40", occurred_on="12/10/2026")
+    # Cross-account: Dan's Telegram report vs a gmail_personal bill goes to review, not straight through.
+    result = atlas.propose_status_change(record_id=bill["id"], to_status="payment_reported",
+                                         evidence_ids=[report["evidence"]["id"]])
+    assert result["reviewRequired"] and not result["changed"]
+    same_account = atlas.record_evidence(source_account="gmail_personal", source_type="manual",
+                                         external_ref=f"dan-report2:{bill['id']}", action="payment_reported",
+                                         counterparty="Origin Energy", amount="182.40", occurred_on="12/10/2026")
+    moved = atlas.propose_status_change(record_id=bill["id"], to_status="payment_reported",
+                                        evidence_ids=[same_account["evidence"]["id"]])
+    assert moved["changed"] and moved["record"]["status"] == "payment_reported"
+    # Dan's own "I paid" report can never confirm payment: it goes to review.
+    attempt = atlas.propose_status_change(record_id=bill["id"], to_status="confirmed_paid",
+                                          evidence_ids=[same_account["evidence"]["id"]])
+    assert attempt["reviewRequired"] and not attempt["changed"]
+    assert "approval" not in attempt
+    assert atlas.get_record(bill["id"])["record"]["status"] == "payment_reported"
+
+
+def test_payment_assistant_refuses_banking_details(atlas):
+    with pytest.raises(AtlasError) as error:
+        atlas.propose_bill(title="Rent", payee="Landlord", due_date="01/11/2026", amount=500,
+                           reference="BSB 062-000 12345678", source_account="telegram:dan", source_type="manual")
+    assert error.value.code == "BANKING_DETAILS_REFUSED"
+    with pytest.raises(AtlasError):
+        atlas.record_evidence(source_account="telegram:dan", source_type="manual", external_ref="x",
+                              action="payment_reported", summary="paid with card 4111 1111 1111 1111")
+
+
+# --------------------------------------------------------------------------
+# social-relationship-assistant
+# --------------------------------------------------------------------------
+
+
+def test_social_skill_drafts_but_never_sends(atlas):
+    task = atlas.propose_task(title="Reply to Sam about Saturday", person="Sam", kind="commitment",
+                              source_account="telegram:dan", source_type="manual", due_date="14/10/2026")
+    draft = atlas.propose_message_draft(record_id=task["record"]["id"], recipient="Sam", channel="sms",
+                                        body="Hi Sam, Saturday works. See you at 10.", source_account="telegram:dan")
+    assert draft["record"]["status"] == "awaiting_approval"
+    approve(atlas, draft["approval"]["id"])
+    with pytest.raises(AtlasError) as error:
+        atlas.execute_approved_action(draft["approval"]["id"])
+    assert error.value.code == "BROKER_NOT_AVAILABLE"
+    assert atlas.approvals.get(draft["approval"]["id"]).status == "approved", "a failed send must not burn the approval"
+
+
+def test_social_skill_duplicate_commitment_is_idempotent(atlas):
+    first = atlas.propose_task(title="Call Mum for her birthday", person="Mum", kind="commitment",
+                               source_account="telegram:dan", source_type="manual", due_date="03/11/2026")
+    second = atlas.propose_task(title="Call Mum for her birthday", person="Mum", kind="commitment",
+                                source_account="telegram:dan", source_type="manual", due_date="03/11/2026")
+    assert first["created"] and not second["created"]
+    assert first["record"]["id"] == second["record"]["id"]
+
+
+# --------------------------------------------------------------------------
+# message-evidence-monitor
+# --------------------------------------------------------------------------
+
+
+def test_evidence_monitor_success_and_failure(atlas, new_bill, fixture_data):
+    bill = new_bill()
+    receipt = fixture_data("emails.json")["origin_receipt"]
+    out = atlas.record_evidence(source_account=receipt["account"], source_type="email", external_ref=receipt["id"],
+                                action="payment_confirmed", counterparty=receipt["from_name"],
+                                amount=receipt["amount"], occurred_on=receipt["date"], reference=receipt["reference"])
+    assert any(c["recordId"] == bill["id"] and c["matched"] for c in out["candidates"])
+    repeat = atlas.record_evidence(source_account=receipt["account"], source_type="email", external_ref=receipt["id"],
+                                   action="payment_confirmed", counterparty=receipt["from_name"])
+    assert not repeat["created"] and repeat["evidence"]["id"] == out["evidence"]["id"]
+    atlas.log_check(check_name="evidence_match", outcome="failed", detail="gmail_work: token expired",
+                    source_account="gmail_work")
+    assert atlas.get_check_status("evidence_match")["state"] == "failed"
+
+
+# --------------------------------------------------------------------------
+# audio-action-capture
+# --------------------------------------------------------------------------
+
+
+def test_audio_skill_success_requires_approval(atlas, fixture_data):
+    item = atlas.enqueue_audio(source_device="pixel-9-pro", recorded_at="2026-10-12T07:40:00+11:00",
+                               chunks=fixture_data("audio.json")["overlapping_chunks"])
+    queue = atlas.list_audio_queue()["items"][0]
+    stamps = [s["timestamp"] for s in queue["segments"]]
+    result = atlas.submit_audio_extraction(audio_id=item["id"], proposals=[
+        {"title": "Call the plumber", "audio_timestamp": stamps[0], "confidence": 0.93},
+        {"title": "Send Sam the photos", "audio_timestamp": stamps[-1], "confidence": 0.41},
+    ])
+    assert result["status"] == "processed"
+    for proposal in result["proposals"]:
+        assert proposal["record"]["label"] == "proposed" and "approval" in proposal
+    low = atlas.get_record(result["proposals"][1]["record"]["id"])
+    assert json.loads(low["details"]["text"])["lowConfidence"] is True
+
+
+def test_audio_skill_failure_and_bad_timestamp(atlas, fixture_data):
+    item = atlas.enqueue_audio(source_device="pixel-9-pro", recorded_at="2026-10-12T07:40:00+11:00",
+                               chunks=fixture_data("audio.json")["overlapping_chunks"])
+    with pytest.raises(AtlasError) as error:
+        atlas.submit_audio_extraction(audio_id=item["id"], proposals=[{"title": "x", "audio_timestamp": "99:99"}])
+    assert error.value.code == "AUDIO_TIMESTAMP_INVALID"
+    assert atlas.submit_audio_extraction(audio_id=item["id"], failed=True, error="garbled")["status"] == "failed"
+    assert atlas.get_system_health()["failedAudio"] == 1
+    with pytest.raises(AtlasError) as error:
+        atlas.propose_task(title="Do a thing", source_account="audio:x", source_type="transcript")
+    assert error.value.code == "AUDIO_TIMESTAMP_REQUIRED"
+
+
+# --------------------------------------------------------------------------
+# weekly-what-matters-report / system-health-and-recovery
+# --------------------------------------------------------------------------
+
+
+def test_weekly_report_skill_sections_and_failure(atlas, new_bill):
+    new_bill()
+    digest = atlas.build_digest("telegram")
+    titles = [s["title"] for s in digest["sections"]]
+    assert titles == ["🔴 Urgent/overdue", "🟠 Action required", "🟡 Upcoming", "🟢 Completed with evidence", "System health"]
+    positions = [digest["text"].index(t) for t in titles]
+    assert positions == sorted(positions)
+    with pytest.raises(ValueError):
+        atlas.build_digest("email")
+
+
+def test_system_health_skill_backup_and_stale_detection(atlas, clock):
+    result = atlas.run_backup()
+    assert result["backup"]["filename"].startswith("hub-")
+    assert atlas.get_check_status("nightly_backup")["state"] == "ok"
+    clock.advance(days=3)
+    status = atlas.get_check_status("nightly_backup")
+    assert status["state"] == "stale" and "NOT run" in status["text"]
+    assert any(a["kind"] == "check_stale" for a in atlas.collect_alerts()["alerts"])
+
+
+def test_system_health_backup_failure_is_reported(atlas, tmp_path, monkeypatch):
+    from hermes_hub_backend import backup
+
+    def boom(self):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(backup.BackupService, "create_snapshot", boom)
+    with pytest.raises(AtlasError) as error:
+        atlas.run_backup()
+    assert error.value.code == "BACKUP_FAILED"
+    assert atlas.get_check_status("nightly_backup")["state"] == "failed"

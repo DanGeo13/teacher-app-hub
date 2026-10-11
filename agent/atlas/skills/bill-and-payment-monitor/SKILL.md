@@ -8,7 +8,7 @@ metadata:
     related_skills: [payment-assistant, message-evidence-monitor]
   atlas:
     triggers: [bill, bills, invoice, due date, overdue, electricity, water bill, gas bill, internet bill, phone bill, rates notice, insurance renewal, is it paid]
-    not_for: [pay it for me, transfer, bank login, service the car, rego renewal for the car, reply to, birthday]
+    not_for: [pay it for me, transfer, bank login, i paid, i have paid, how do i pay, service the car, rego renewal for the car, reply to, birthday]
     check: bill_check
 ---
 
