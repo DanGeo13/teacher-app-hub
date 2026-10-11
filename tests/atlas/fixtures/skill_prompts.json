@@ -1,0 +1,13 @@
+{
+  "bill-and-payment-monitor": {
+    "trigger": ["What bills are due this week?", "Is the electricity bill paid yet?", "Anything overdue on the water bill?"],
+    "unrelated": ["Pay it for me from my bank account", "When is the car service due?", "Reply to Sam about Saturday"]
+  },
+  "car-maintenance-tracker": {
+    "trigger": ["The odometer is at 48,200 km now", "When is the next car service due?", "Is the logbook service booked?"],
+    "unrelated": ["Book it for me at the mechanic", "Is the electricity bill paid?", "What's on this weekend?"]
+  },
+  "_none": {
+    "unrelated": ["Write me a poem about the ocean", "What's the capital of France?", "Summarise this school report for my Year 9 class"]
+  }
+}

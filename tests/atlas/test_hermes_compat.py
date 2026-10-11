@@ -36,13 +36,13 @@ def run_hermes(code: str, home: Path, timeout: int = 180) -> str:
     return proc.stdout.strip().splitlines()[-1]
 
 
-def make_profile(tmp_path: Path, enable_atlas_hub: bool = True) -> Path:
+def make_profile(tmp_path: Path, enable_atlas_hub: bool = True, agent_dir: Path = AGENT_DIR) -> Path:
     data_dir = tmp_path / "hub-data"
     Database(data_dir / "hub.db")
     home = tmp_path / ".hermes" / "profiles" / "atlas"
     home.mkdir(parents=True)
     config = atlas_policy.build_hermes_config(hub_python=sys.executable, hub_data_dir=str(data_dir),
-                                              agent_dir=str(AGENT_DIR))
+                                              agent_dir=str(agent_dir))
     config["mcp_servers"]["atlas-hub"]["enabled"] = enable_atlas_hub
     (home / "config.yaml").write_text(yaml.safe_dump(config))
     (home / "SOUL.md").write_bytes(atlas_policy.PERSONA_PATH.read_bytes())
@@ -64,9 +64,13 @@ def test_persona_passes_hermes_injection_scanner_and_loads_verbatim(tmp_path):
 
 
 def test_hermes_resolver_gives_remote_platforms_no_forbidden_toolset(tmp_path):
-    home = make_profile(tmp_path)
-    proc = subprocess.run([HERMES_PYTHON, str(AGENT_DIR / "install" / "check_policy.py"), "--hermes-home",
-                           str(home), "--json"], capture_output=True, text=True, timeout=300)
+    from skill_harness import approved_agent_dir
+
+    reviewed = approved_agent_dir(tmp_path)
+    home = make_profile(tmp_path, agent_dir=reviewed)
+    proc = subprocess.run([HERMES_PYTHON, str(reviewed / "install" / "check_policy.py"), "--hermes-home",
+                           str(home), "--json"], capture_output=True, text=True, timeout=300,
+                          env={**os.environ, "ATLAS_AGENT_DIR": str(reviewed)})
     report = json.loads(proc.stdout)
     by_name = {r["check"]: r for r in report["results"]}
     assert by_name["resolved remote toolsets (Hermes resolver)"]["status"] == "PASS", by_name

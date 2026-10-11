@@ -19,6 +19,7 @@
       "list_audio_queue",
       "propose_bill",
       "propose_car_service",
+      "record_odometer",
       "propose_task",
       "propose_status_change",
       "propose_message_draft",

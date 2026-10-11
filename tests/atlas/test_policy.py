@@ -121,9 +121,10 @@ def test_profile_environment_checks(tmp_path, monkeypatch):
     assert atlas_policy.check_profile_environment(profile) == []
 
 
-def test_check_policy_cli_exits_nonzero_on_violation(tmp_path, capsys):
+def test_check_policy_cli_exits_nonzero_on_violation(tmp_path, capsys, monkeypatch):
     import check_policy
     import yaml
+    from skill_harness import approved_agent_dir
 
     profile = tmp_path / "profiles" / "atlas"
     profile.mkdir(parents=True)
@@ -137,6 +138,14 @@ def test_check_policy_cli_exits_nonzero_on_violation(tmp_path, capsys):
 
     config["platform_toolsets"]["telegram"].remove("terminal")
     (profile / "config.yaml").write_text(yaml.safe_dump(config))
+    # Skills are pending Dan's review in the repository, so the check must fail...
+    assert check_policy.main(["--hermes-home", str(profile), "--static-only", "--json"]) == 1
+    pending = json.loads(capsys.readouterr().out)
+    assert "SKILL_PENDING_REVIEW" in json.dumps(pending)
+    # ...and pass once every skill has been reviewed.
+    reviewed = approved_agent_dir(tmp_path)
+    monkeypatch.setattr(atlas_policy, "SKILLS_DIR", reviewed / "skills")
+    monkeypatch.setattr(atlas_policy, "SKILLS_LOCK_PATH", reviewed / "skills.lock.json")
     assert check_policy.main(["--hermes-home", str(profile), "--static-only", "--json"]) == 0
     report = json.loads(capsys.readouterr().out)
     blocked = [r for r in report["results"] if r["status"] == "BLOCKED"]

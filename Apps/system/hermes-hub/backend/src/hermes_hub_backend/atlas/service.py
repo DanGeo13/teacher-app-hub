@@ -392,6 +392,35 @@ class AtlasService:
             )
         return {"created": created, "record": self._present_record(record)}
 
+    def record_odometer(self, *, vehicle: str, odometer_km: int, source_account: str) -> dict[str, Any]:
+        """Record a stated odometer reading on the vehicle's open service records."""
+        vehicle = _require(vehicle, "vehicle", 120)
+        account = _require(source_account, "source_account", 120)
+        if not isinstance(odometer_km, int) or not 0 <= odometer_km <= 2_000_000:
+            raise AtlasError("INVALID_ODOMETER", "odometer_km must be a whole number of kilometres")
+        key = counterparty_key(vehicle)
+        updated = []
+        with self.database.write() as connection:
+            rows = [self._record_dict(r) for r in connection.execute(
+                "SELECT * FROM atlas_records WHERE kind = 'car_service' AND counterparty_key = ?", (key,)
+            ).fetchall()]
+            open_rows = [r for r in rows if r["status"] not in TERMINAL["car_service"]]
+            if not open_rows:
+                raise AtlasError("NOT_FOUND", f"no open service records for {vehicle}")
+            for r in open_rows:
+                if r["current_odometer_km"] is not None and odometer_km < r["current_odometer_km"]:
+                    raise AtlasError("ODOMETER_WENT_BACKWARDS",
+                                     f"{odometer_km} km is lower than the recorded {r['current_odometer_km']} km")
+                connection.execute(
+                    "UPDATE atlas_records SET current_odometer_km = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
+                    (odometer_km, _iso(self._now()), r["id"]),
+                )
+                self._audit(connection, "atlas.odometer.recorded", "atlas_record", r["id"],
+                            {"odometerKm": odometer_km, "sourceAccount": account})
+                updated.append(r["id"])
+            records = [self._present_record(self._load_record(connection, rid)) for rid in updated]
+        return {"updated": records}
+
     def propose_task(self, *, title: str, source_account: str, source_type: str, person: str | None = None,
                      due_date: str | None = None, kind: str = "task", audio_id: str | None = None,
                      audio_timestamp: str | None = None, confidence: float | None = None,
@@ -1045,6 +1074,8 @@ class AtlasService:
         if entry is None or not path.is_file():
             raise AtlasError("SKILL_NOT_FOUND", f"no reviewed skill named {name}")
         content = path.read_bytes()
+        if not entry.get("reviewedBy"):
+            raise AtlasError("SKILL_NOT_REVIEWED", f"{name} is waiting for Dan's review and cannot be used yet")
         if hashlib.sha256(content).hexdigest() != entry["sha256"]:
             raise AtlasError("SKILL_NOT_REVIEWED",
                              f"{name} changed since Dan reviewed it; it stays disabled until he re-approves it")

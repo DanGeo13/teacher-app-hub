@@ -1,1 +1,15 @@
-{"schemaVersion":1,"skills":{}}
+{
+  "schemaVersion": 1,
+  "skills": {
+    "bill-and-payment-monitor": {
+      "sha256": "21510f9f897aad86f00e4ba98fe5ddcce6b5353749ce0044bcf098cbac7bbe42",
+      "reviewedBy": null,
+      "reviewedOn": null
+    },
+    "car-maintenance-tracker": {
+      "sha256": "71480d7dfabcf4eac1a13e69a57a6eb1ff60352683ad7f4389d69d62765f2bde",
+      "reviewedBy": null,
+      "reviewedOn": null
+    }
+  }
+}

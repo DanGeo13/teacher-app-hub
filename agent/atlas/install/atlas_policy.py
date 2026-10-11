@@ -20,8 +20,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
-AGENT_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = AGENT_DIR.parents[1]
+AGENT_DIR = (
+    Path(os.environ["ATLAS_AGENT_DIR"]).expanduser().resolve()
+    if os.environ.get("ATLAS_AGENT_DIR")
+    else Path(__file__).resolve().parents[1]
+)
 POLICY_PATH = AGENT_DIR / "policy" / "tool-policy.json"
 CONFIG_PATH = AGENT_DIR / "atlas.config.json"
 SKILLS_DIR = AGENT_DIR / "skills"
@@ -335,20 +338,24 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def current_skill_hashes(skills_dir: Path = SKILLS_DIR) -> dict[str, str]:
+def current_skill_hashes(skills_dir: Path | None = None) -> dict[str, str]:
+    skills_dir = skills_dir or SKILLS_DIR
     hashes = {}
     for skill_md in sorted(skills_dir.glob("*/SKILL.md")):
         hashes[skill_md.parent.name] = sha256_file(skill_md)
     return hashes
 
 
-def check_skills_lock(
-    skills_dir: Path = SKILLS_DIR, lock_path: Path = SKILLS_LOCK_PATH
-) -> list[Violation]:
+def check_skills_lock(skills_dir: Path | None = None, lock_path: Path | None = None) -> list[Violation]:
+    skills_dir = skills_dir or SKILLS_DIR
+    lock_path = lock_path or SKILLS_LOCK_PATH
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
     reviewed = {name: entry["sha256"] for name, entry in lock["skills"].items()}
     current = current_skill_hashes(skills_dir)
     out = []
+    for name, entry in lock["skills"].items():
+        if not entry.get("reviewedBy"):
+            out.append(Violation("SKILL_PENDING_REVIEW", f"{name} has not been reviewed by Dan yet"))
     for name, digest in current.items():
         if name not in reviewed:
             out.append(Violation("SKILL_UNREVIEWED", f"{name} is not in skills.lock.json"))
