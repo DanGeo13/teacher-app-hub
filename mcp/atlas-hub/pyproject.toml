@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools==80.10.2", "wheel==0.46.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "atlas-hub-mcp"
+version = "0.1.0"
+description = "atlas-hub: stdio MCP server exposing Atlas tools over the Hermes Hub database"
+requires-python = ">=3.11,<3.14"
+dependencies = ["hermes-hub-backend"]
+
+[tool.setuptools]
+packages = ["atlas_hub_mcp"]

@@ -8,6 +8,7 @@ frontend="$repo_root/Apps/system/hermes-hub/frontend"
 python3 -m venv "$backend/.venv"
 "$backend/.venv/bin/python" -m pip install --disable-pip-version-check -r "$backend/requirements.lock"
 "$backend/.venv/bin/python" -m pip install --disable-pip-version-check --no-deps -e "$backend"
+"$backend/.venv/bin/python" -m pip install --disable-pip-version-check --no-deps -e "$repo_root/mcp/atlas-hub"
 npm --prefix "$frontend" ci
 
 printf 'Hermes Hub development dependencies are ready. No services were started.\n'
