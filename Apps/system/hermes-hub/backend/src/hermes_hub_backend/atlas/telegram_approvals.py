@@ -108,12 +108,13 @@ class TelegramApprovalChannel:
                     {"text": "❌ Deny", "callback_data": f"{CALLBACK_PREFIX}:d:{row['id']}:{prefix}"},
                 ]]},
             })
+            sent_at = self.service._now().isoformat().replace("+00:00", "Z")
             with self.service.database.write() as connection:
                 connection.execute(
                     "INSERT OR IGNORE INTO atlas_alerts(dedupe_key, record_id, kind, severity, message, "
                     "first_raised_at, last_delivered_at, delivered_count) VALUES (?, NULL, 'approval_card', "
-                    "'info', ?, datetime('now'), datetime('now'), 1)",
-                    (key, row["summary"] or row["action"]),
+                    "'info', ?, ?, ?, 1)",
+                    (key, row["summary"] or row["action"], sent_at, sent_at),
                 )
             sent.append(row["id"])
         return sent

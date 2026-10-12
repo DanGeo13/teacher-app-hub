@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from hermes_hub_backend.atlas.service import AtlasService
-from hermes_hub_backend.database import Database
 
 ROOT = Path(__file__).resolve().parents[2]
 AGENT_DIR = ROOT / "agent" / "atlas"

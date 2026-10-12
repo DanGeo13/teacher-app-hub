@@ -41,11 +41,14 @@ def build_service_from_env() -> AtlasService:
             f"atlas-hub: Hub database schema is {version}, need {REQUIRED_SCHEMA_VERSION}; start the Hub once to migrate"
         )
     agent_dir = os.environ.get("ATLAS_AGENT_DIR")
-    return AtlasService(
-        database,
-        agent_dir=Path(agent_dir).expanduser() if agent_dir else None,
-        backup_dir=data_path / "backups",
-    )
+    try:
+        return AtlasService(
+            database,
+            agent_dir=Path(agent_dir).expanduser() if agent_dir else None,
+            backup_dir=data_path / "backups",
+        )
+    except FileNotFoundError as error:
+        raise SystemExit(f"atlas-hub: Atlas agent definition not found ({error}); set ATLAS_AGENT_DIR") from None
 
 
 class McpServer:

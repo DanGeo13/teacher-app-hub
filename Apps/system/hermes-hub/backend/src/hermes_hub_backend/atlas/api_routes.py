@@ -17,7 +17,10 @@ from ..models import ApiModel
 from .service import INTERNAL_ACTIONS, AtlasError, AtlasService
 from .verification import VerificationManager
 
-STATUS_FOR_CODE = {"NOT_FOUND": 404, "SKILL_NOT_FOUND": 404}
+STATUS_FOR_CODE = {"NOT_FOUND": 404, "SKILL_NOT_FOUND": 404, "ATLAS_NOT_CONFIGURED": 503}
+# Input problems are the caller's to fix (400); everything else is a state
+# conflict such as an illegal transition or a used approval (409).
+BAD_REQUEST_PREFIXES = ("INVALID_", "MISSING_", "FIELD_TOO_LONG", "BANKING_DETAILS_REFUSED", "AUDIO_TIMESTAMP_")
 
 
 class DecisionRequest(ApiModel):
@@ -46,7 +49,10 @@ class AudioUpload(ApiModel):
 
 
 def atlas_error_response(error: AtlasError) -> JSONResponse:
-    return JSONResponse(status_code=STATUS_FOR_CODE.get(error.code, 409), content=error.to_dict())
+    status = STATUS_FOR_CODE.get(error.code)
+    if status is None:
+        status = 400 if error.code.startswith(BAD_REQUEST_PREFIXES) else 409
+    return JSONResponse(status_code=status, content=error.to_dict())
 
 
 def register_atlas_routes(
@@ -56,10 +62,21 @@ def register_atlas_routes(
     require_session: Callable[..., AuthenticatedSession],
     require_csrf: Callable[..., AuthenticatedSession],
 ) -> None:
+    base_session, base_csrf = require_session, require_csrf
+
+    def require_session(session: AuthenticatedSession = Depends(base_session)) -> AuthenticatedSession:
+        atlas.require_ready()
+        return session
+
+    def require_csrf(session: AuthenticatedSession = Depends(base_csrf)) -> AuthenticatedSession:
+        atlas.require_ready()
+        return session
+
     @router.get("/atlas/obligations")
     def obligations(kind: str | None = Query(default=None), include_closed: bool = False,
+                    limit: int = Query(default=200, ge=1, le=500), offset: int = Query(default=0, ge=0),
                     _s: AuthenticatedSession = Depends(require_session)) -> Any:
-        return atlas.list_obligations(kind, include_closed)
+        return atlas.list_obligations(kind, include_closed, limit=limit, offset=offset)
 
     @router.get("/atlas/records/{record_id}")
     def record(record_id: str, _s: AuthenticatedSession = Depends(require_session)) -> Any:

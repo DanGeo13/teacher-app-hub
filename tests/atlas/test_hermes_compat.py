@@ -18,7 +18,7 @@ import pytest
 import yaml
 
 import atlas_policy
-from atlas_helpers import AGENT_DIR, ROOT
+from atlas_helpers import AGENT_DIR
 from hermes_hub_backend.database import Database
 
 HERMES_PYTHON = os.environ.get("ATLAS_TEST_HERMES_PYTHON", "")

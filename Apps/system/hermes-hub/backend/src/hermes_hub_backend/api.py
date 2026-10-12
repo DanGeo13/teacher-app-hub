@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -52,7 +53,14 @@ def create_app(settings: Settings) -> FastAPI:
     audit = AuditService(database)
     backups = BackupService(database, settings.backup_dir)
     hermes_sessions = HermesSessionService(database, settings)
-    atlas = AtlasService(database, backup_dir=settings.backup_dir)
+    try:
+        atlas = AtlasService(database, backup_dir=settings.backup_dir)
+        atlas_ready = True
+    except (FileNotFoundError, ValueError) as error:
+        # The Hub keeps working without Atlas; Atlas endpoints answer 503.
+        print(f"Atlas disabled: agent definition not found ({error}). Set ATLAS_AGENT_DIR.", file=sys.stderr)
+        atlas = AtlasService.unconfigured(database, backup_dir=settings.backup_dir)
+        atlas_ready = False
     approvals = atlas.approvals
     atlas_verification = VerificationManager(
         lambda: VerificationRunner(atlas, AtlasHostSettings.from_env())
@@ -73,6 +81,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.backups = backups
     app.state.hermes_sessions = hermes_sessions
     app.state.atlas = atlas
+    app.state.atlas_ready = atlas_ready
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):

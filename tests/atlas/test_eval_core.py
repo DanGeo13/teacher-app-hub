@@ -12,6 +12,7 @@ from hermes_hub_backend.atlas import audio as audio_mod
 from hermes_hub_backend.atlas import injection
 from hermes_hub_backend.atlas.service import AtlasError
 from hermes_hub_backend.atlas.state import TransitionError, get_transition
+from hermes_hub_backend.errors import ApprovalError
 
 
 def _evidence(atlas, email, action="payment_confirmed"):
@@ -190,7 +191,7 @@ def test_approval_double_use_is_idempotent_not_repeated(atlas, new_bill, fixture
     assert first["idempotentReplay"] is False and second["idempotentReplay"] is True
     history = atlas.get_record(bill["id"])["history"]
     assert [h["to_status"] for h in history].count("confirmed_paid") == 1
-    with pytest.raises(Exception):
+    with pytest.raises(ApprovalError):
         approve(atlas, approval_id)
 
 

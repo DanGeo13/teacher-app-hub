@@ -5,15 +5,12 @@ from __future__ import annotations
 
 import json
 import time
-from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from atlas_helpers import AGENT_DIR, approve
 from hermes_hub_backend.api import create_app
 from hermes_hub_backend.atlas.host import AtlasHostSettings, SecretFileError, read_secret_file
-from hermes_hub_backend.atlas.service import AtlasError
 from hermes_hub_backend.atlas.telegram_approvals import TelegramApprovalChannel
 from hermes_hub_backend.atlas.verification import VerificationRunner
 from hermes_hub_backend.errors import ApprovalError

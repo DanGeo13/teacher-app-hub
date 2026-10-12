@@ -14,12 +14,11 @@ import os
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
 from ..approvals import ApprovalService, canonical_content_hash
 from ..audit import AuditService
 from ..database import Database
-from ..errors import ApprovalError, NotFoundError
 from ..redaction import redact_json, redact_text
 from . import audio as audio_mod
 from . import evidence as evidence_mod
@@ -126,6 +125,28 @@ class AtlasService:
         self.config = json.loads((self.agent_dir / "atlas.config.json").read_text(encoding="utf-8"))
         self.backup_dir = backup_dir
 
+    @classmethod
+    def unconfigured(cls, database: Database, *, backup_dir: Path | None = None) -> "AtlasService":
+        """An instance whose Atlas operations refuse with ATLAS_NOT_CONFIGURED,
+        while the shared approval engine keeps serving the rest of the Hub."""
+        service = cls.__new__(cls)
+        service.database = database
+        service.clock = system_clock
+        service.approvals = ApprovalService(database, clock=system_clock)
+        service.agent_dir = None
+        service.config = None
+        service.backup_dir = backup_dir
+        return service
+
+    @property
+    def ready(self) -> bool:
+        return self.config is not None
+
+    def require_ready(self) -> None:
+        if self.config is None:
+            raise AtlasError("ATLAS_NOT_CONFIGURED",
+                             "Atlas is not configured on this Hub: agent/atlas was not found (set ATLAS_AGENT_DIR)")
+
     # ------------------------------------------------------------------ util
 
     def _now(self) -> datetime:
@@ -207,10 +228,13 @@ class AtlasService:
     # ------------------------------------------------------------ read tools
 
     def list_obligations(
-        self, kind: str | None = None, include_closed: bool = False, source_account: str | None = None
+        self, kind: str | None = None, include_closed: bool = False, source_account: str | None = None,
+        limit: int = 200, offset: int = 0,
     ) -> dict[str, Any]:
         if kind is not None and kind not in INITIAL_STATUS:
             raise AtlasError("INVALID_KIND", f"kind must be one of {sorted(INITIAL_STATUS)}")
+        limit = max(1, min(int(limit), 500))
+        offset = max(0, int(offset))
         query = "SELECT * FROM atlas_records WHERE review_state != 'archived'"
         params: list[Any] = []
         if kind:
@@ -219,12 +243,16 @@ class AtlasService:
         if source_account:
             query += " AND source_account = ?"
             params.append(source_account)
-        with self.database.read() as connection:
-            rows = [self._record_dict(r) for r in connection.execute(query, params).fetchall()]
         if not include_closed:
-            rows = [r for r in rows if r["status"] not in TERMINAL[r["kind"]]]
-        rows.sort(key=lambda r: (r["due_date"] or "9999-12-31", r["title"]))
-        return {"today": format_date(self._today()), "records": [self._present_record(r) for r in rows]}
+            closed = sorted({status for statuses in TERMINAL.values() for status in statuses})
+            query += f" AND status NOT IN ({', '.join('?' for _ in closed)})"
+            params.extend(closed)
+        query += " ORDER BY coalesce(due_date, '9999-12-31'), title LIMIT ? OFFSET ?"
+        with self.database.read() as connection:
+            rows = [self._record_dict(r) for r in connection.execute(query, [*params, limit + 1, offset]).fetchall()]
+        more = len(rows) > limit
+        return {"today": format_date(self._today()), "records": [self._present_record(r) for r in rows[:limit]],
+                "nextOffset": offset + limit if more else None}
 
     def get_record(self, record_id: str) -> dict[str, Any]:
         with self.database.read() as connection:
@@ -419,7 +447,9 @@ class AtlasService:
                     raise AtlasError("ODOMETER_WENT_BACKWARDS",
                                      f"{odometer_km} km is lower than the recorded {r['current_odometer_km']} km")
                 connection.execute(
-                    "UPDATE atlas_records SET current_odometer_km = ?, revision = revision + 1, updated_at = ? WHERE id = ?",
+                    # Not a revision bump: the odometer is in no approval payload, so a
+                    # new reading must not invalidate pending approvals.
+                    "UPDATE atlas_records SET current_odometer_km = ?, updated_at = ? WHERE id = ?",
                     (odometer_km, _iso(self._now()), r["id"]),
                 )
                 self._audit(connection, "atlas.odometer.recorded", "atlas_record", r["id"],
@@ -494,7 +524,7 @@ class AtlasService:
         with self.database.write() as connection:
             record = self._load_record(connection, record_id)
             transition, evidence_rows, results = self._validate_transition(connection, record, to_status, evidence_ids)
-            failing = [(ev, r) for ev, r in zip(evidence_rows, results) if not r["matched"]]
+            failing = [(ev, r) for ev, r in zip(evidence_rows, results, strict=True) if not r["matched"]]
             if failing:
                 for ev, r in failing:
                     connection.execute(
@@ -507,7 +537,7 @@ class AtlasService:
                     "changed": False,
                     "reviewRequired": True,
                     "record": self._present_record(record),
-                    "evidenceResults": dict(zip(evidence_ids, results)),
+                    "evidenceResults": dict(zip(evidence_ids, results, strict=True)),
                     "message": "Evidence did not match; record left unchanged and added to the review list.",
                 }
             if not transition.requires_approval:
@@ -660,10 +690,15 @@ class AtlasService:
     def _match_candidates(self, connection, evidence: Mapping[str, Any]) -> list[dict[str, Any]]:
         from .state import TRANSITIONS
 
-        out = []
+        if not evidence.get("counterparty_key"):
+            return []
+        # Only records for the same payee/person can ever match (rule 1), so
+        # filter in SQL (indexed) instead of scanning every record each time.
         rows = connection.execute(
-            "SELECT * FROM atlas_records WHERE review_state != 'archived'"
+            "SELECT * FROM atlas_records WHERE counterparty_key = ? AND review_state != 'archived'",
+            (evidence["counterparty_key"],),
         ).fetchall()
+        out = []
         for row in rows:
             record = self._record_dict(row)
             for transition in TRANSITIONS:
@@ -672,9 +707,8 @@ class AtlasService:
                 if transition.external_only or evidence["action"] not in transition.evidence_actions:
                     continue
                 result = evidence_mod.evaluate(record, evidence, transition)
-                if result.matched or record["counterparty_key"] == evidence.get("counterparty_key"):
-                    out.append({"recordId": record["id"], "title": record["title"], "toStatus": transition.to_status,
-                                "requiresApproval": transition.requires_approval, **result.to_dict()})
+                out.append({"recordId": record["id"], "title": record["title"], "toStatus": transition.to_status,
+                            "requiresApproval": transition.requires_approval, **result.to_dict()})
         return out
 
     def log_suspicious_content(self, *, source: str, quote: str, record_id: str | None = None) -> dict[str, Any]:
@@ -930,6 +964,9 @@ class AtlasService:
         except Exception as error:  # reported, never swallowed
             self.log_check(check_name="nightly_backup", outcome="failed", detail=f"backup failed: {error}")
             raise AtlasError("BACKUP_FAILED", f"backup failed: {error}") from error
+        with self.database.write() as connection:
+            # SQLite's counterpart of ANALYZE: refresh planner statistics nightly.
+            connection.execute("PRAGMA optimize")
         self.log_check(check_name="nightly_backup", outcome="ok", detail=f"snapshot {record.filename}")
         return {"backup": record.model_dump(by_alias=True, mode="json"),
                 "note": "Local snapshot only; this is not an off-device backup."}
@@ -958,7 +995,7 @@ class AtlasService:
             where = f" [{r['source_account']}]"
             if r["kind"] == "bill" and r["due_date"]:
                 days = (date.fromisoformat(r["due_date"]) - today).days
-                if days < 0:
+                if days < 0 and r["status"] == "due":
                     out.append({"key": f"bill_overdue:{r['id']}:{r['due_date']}", "recordId": r["id"], "kind": "bill_overdue",
                                 "severity": "urgent", "message": f"🔴 OVERDUE: {r['title']}{label} {format_aud(r['amount_cents'])} was due {format_date(r['due_date'])}{where}"})
                 elif days * 24 <= alerts_cfg["billDueWithinHours"] and r["status"] == "due":
@@ -1143,7 +1180,7 @@ class AtlasService:
             if record["source_type"] == "transcript":
                 raise AtlasError("NEEDS_APPROVAL", "audio-derived records are accepted through their approval")
             connection.execute(
-                "UPDATE atlas_records SET review_state = 'active', revision = revision + 1, updated_at = ? WHERE id = ?",
+                "UPDATE atlas_records SET review_state = 'active', updated_at = ? WHERE id = ?",
                 (_iso(self._now()), record_id),
             )
             self._audit(connection, "atlas.record.accepted", "atlas_record", record_id, {"via": "dashboard"}, actor=actor)

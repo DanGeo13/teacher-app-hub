@@ -82,7 +82,8 @@ def build_digest(service: "AtlasService", channel: str = "telegram") -> dict[str
         km_soon = (r["kind"] == "car_service" and r["due_odometer_km"] is not None
                    and r["current_odometer_km"] is not None
                    and r["due_odometer_km"] - r["current_odometer_km"] <= alerts_cfg["carServiceDueWithinKm"])
-        if (days is not None and days < 0) or km_overdue:
+        reported_paid = r["status"] == "payment_reported"  # waiting for evidence, not overdue
+        if ((days is not None and days < 0) or km_overdue) and not reported_paid:
             add("urgent", group, {**item, "text": "OVERDUE: " + item["text"]})
         elif r["kind"] == "bill" and days is not None and days * 24 <= alerts_cfg["billDueWithinHours"] and r["status"] == "due":
             add("urgent", group, item)

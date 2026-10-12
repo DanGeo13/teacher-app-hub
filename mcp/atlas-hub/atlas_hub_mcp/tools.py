@@ -16,7 +16,8 @@ from hermes_hub_backend.atlas.service import AtlasService
 
 _STR = {"type": "string"}
 _DATE = {"type": "string", "description": "DD/MM/YYYY or YYYY-MM-DD (Australia/Sydney)"}
-_AMOUNT = {"type": ["number", "string"], "description": "AUD, e.g. 129.95"}
+# One JSON type per property: some model providers reject union types.
+_AMOUNT = {"type": "string", "description": "AUD amount as text, e.g. \"129.95\""}
 _SOURCE = {"type": "string", "description": "Account or channel the item came from, e.g. gmail_personal"}
 _SOURCE_TYPE = {
     "type": "string",
@@ -63,8 +64,9 @@ TOOLS: tuple[Tool, ...] = (
     Tool("list_obligations", "autonomous",
          "List open bills, car services, commitments and tasks with due dates, amounts and source account.",
          {"kind": {"type": "string", "enum": ["bill", "car_service", "commitment", "task"]},
-          "include_closed": {"type": "boolean"}, "source_account": _STR}, (),
-         lambda s, a: s.list_obligations(**_kw("kind", "include_closed", "source_account")(a))),
+          "include_closed": {"type": "boolean"}, "source_account": _STR,
+          "limit": {"type": "integer", "minimum": 1, "maximum": 500}, "offset": {"type": "integer", "minimum": 0}}, (),
+         lambda s, a: s.list_obligations(**_kw("kind", "include_closed", "source_account", "limit", "offset")(a))),
     Tool("get_record", "autonomous", "Get one record with its history, attached evidence and approvals.",
          {"record_id": _STR}, ("record_id",), lambda s, a: s.get_record(a["record_id"])),
     Tool("search_vault", "autonomous", "Search Hub records and evidence (not mailboxes).",
