@@ -34,7 +34,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import atlas_policy  # noqa: E402
 
-SCHEDULES_PATH = atlas_policy.AGENT_DIR / "schedules.yaml"
 JOB_PREFIX = "atlas:"
 # Keys Atlas owns outright: replaced, not merged, so stale entries cannot
 # survive and widen the policy.
@@ -49,13 +48,6 @@ def merge_config(existing: dict[str, Any], atlas: dict[str, Any]) -> dict[str, A
         else:
             merged[key] = {**merged[key], **copy.deepcopy(value)}
     return merged
-
-
-def load_schedules(path: Path = SCHEDULES_PATH) -> list[dict[str, Any]]:
-    import yaml
-
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    return list(data["jobs"])
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -92,7 +84,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {violation}", file=sys.stderr)
         return 1
 
-    jobs = load_schedules()
+    jobs = atlas_policy.load_schedules()
+    job_violations = atlas_policy.check_schedules(jobs)
+    if job_violations:
+        print("Refusing to install: schedules violate policy:", file=sys.stderr)
+        for violation in job_violations:
+            print(f"  - {violation}", file=sys.stderr)
+        return 1
     print(f"Profile: {profile}")
     print(f"SOUL.md  <- {atlas_policy.PERSONA_PATH}")
     print(f"config.yaml: set {sorted(atlas_cfg)}")

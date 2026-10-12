@@ -12,7 +12,7 @@ import hashlib
 import json
 import os
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -784,14 +784,16 @@ class AtlasService:
             ).fetchone()
         now = self._now()
         if last is None:
+            extra = self.weekly_digest_window() if check_name == "weekly_digest" else {}
             return {"check": check_name, "state": "never_run", "catchUpRequired": False,
-                    "text": f"{check_name} has never run.", "expectedEveryMinutes": cfg["expectedEveryMinutes"]}
+                    "text": f"{check_name} has never run.", "expectedEveryMinutes": cfg["expectedEveryMinutes"], **extra}
         gap = int((now - _parse_iso(last["created_at"])).total_seconds() // 60)
         state = last["outcome"]
         if gap > cfg["staleAfterMinutes"]:
             state = "stale"
         catch_up = gap > 2 * cfg["expectedEveryMinutes"]
         when = to_sydney(_parse_iso(last["created_at"])).strftime("%H:%M %d/%m/%Y")
+        extra = self.weekly_digest_window() if check_name == "weekly_digest" else {}
         text = {
             "ok": f"{check_name} ran at {when} and found changes.",
             "no_change": f"{check_name} ran at {when}: nothing changed.",
@@ -812,7 +814,31 @@ class AtlasService:
             ) if catch_up else None,
             "expectedEveryMinutes": cfg["expectedEveryMinutes"],
             "text": text,
+            **extra,
         }
+
+    def weekly_digest_window(self) -> dict[str, Any]:
+        """Is the Sunday 08:00 Australia/Sydney digest due right now?
+
+        Hermes 0.19.0 anchors cron on the last run's fixed UTC offset, so the
+        first run after a daylight-saving change lands an hour early or late.
+        The weekly job therefore fires hourly on Sunday mornings and the Hub
+        decides: due from 08:00 local until noon, once per week.
+        """
+        local = to_sydney(self._now())
+        if local.weekday() != 6 or not 8 <= local.hour < 12:
+            return {"digestDueNow": False, "reason": "outside Sunday 08:00-12:00 Sydney",
+                    "localTime": local.strftime("%a %d/%m/%Y %H:%M")}
+        slot_start = local.replace(hour=8, minute=0, second=0, microsecond=0)
+        with self.database.read() as connection:
+            sent = connection.execute(
+                "SELECT created_at FROM atlas_checks WHERE check_name = 'weekly_digest' AND outcome = 'ok' "
+                "AND created_at >= ? ORDER BY id DESC LIMIT 1",
+                (_iso(slot_start.astimezone(UTC)),),
+            ).fetchone()
+        return {"digestDueNow": sent is None,
+                "reason": "already sent this week" if sent else "Sunday digest slot",
+                "localTime": local.strftime("%a %d/%m/%Y %H:%M")}
 
     def log_check(self, *, check_name: str, outcome: str, detail: str = "", source_account: str | None = None,
                   catch_up: bool = False) -> dict[str, Any]:

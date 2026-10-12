@@ -31,6 +31,7 @@ SKILLS_DIR = AGENT_DIR / "skills"
 SKILLS_LOCK_PATH = AGENT_DIR / "skills.lock.json"
 PERSONA_PATH = AGENT_DIR / "persona" / "SOUL.md"
 PROFILE_MARKER = "ATLAS_PROFILE"
+SCHEDULES_PATH = AGENT_DIR / "schedules.yaml"
 
 # Values that look like an inline credential rather than a path or a flag.
 _SECRET_VALUE = re.compile(
@@ -55,6 +56,56 @@ def load_policy(path: Path = POLICY_PATH) -> dict[str, Any]:
 
 def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_schedules(path: Path | None = None, config: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Scheduled jobs with ``schedule_from_config`` resolved to "every <N>m"."""
+    import yaml
+
+    config = config or load_config()
+    data = yaml.safe_load((path or SCHEDULES_PATH).read_text(encoding="utf-8"))
+    jobs = []
+    for job in data["jobs"]:
+        job = dict(job)
+        source = job.pop("schedule_from_config", None)
+        if source:
+            job["schedule"] = f"every {int(config['checks'][source]['expectedEveryMinutes'])}m"
+        jobs.append(job)
+    return jobs
+
+
+REQUIRED_PROMPT_PARTS = ("Allowed tools:", "Data sources:", "Destination:", "Failure behaviour:")
+
+
+def check_schedules(jobs: list[dict[str, Any]], policy: Mapping[str, Any] | None = None,
+                    config: Mapping[str, Any] | None = None) -> list[Violation]:
+    policy = policy or load_policy()
+    config = config or load_config()
+    hermes = policy["hermes"]
+    allowed = set(hermes["allowedNativeToolsets"]["cron"]) | set(hermes["allowedMcpServers"])
+    skills = set(current_skill_hashes())
+    out: list[Violation] = []
+    for job in jobs:
+        name = job.get("name", "?")
+        extra = sorted(set(job.get("toolsets") or []) - allowed)
+        if not job.get("toolsets"):
+            out.append(Violation("JOB_NO_TOOLSETS", f"{name}: toolsets must be listed explicitly"))
+        if extra:
+            out.append(Violation("JOB_TOOLSET_NOT_ALLOWED", f"{name}: {extra}"))
+        for skill in job.get("skills") or []:
+            if skill not in skills:
+                out.append(Violation("JOB_UNKNOWN_SKILL", f"{name}: {skill}"))
+            if skill not in job.get("prompt", ""):
+                out.append(Violation("JOB_PROMPT_INCOMPLETE", f"{name}: prompt does not name skill {skill}"))
+        for part in REQUIRED_PROMPT_PARTS:
+            if part not in job.get("prompt", ""):
+                out.append(Violation("JOB_PROMPT_INCOMPLETE", f"{name}: prompt lacks '{part}'"))
+        if job.get("check") not in config["checks"]:
+            out.append(Violation("JOB_UNKNOWN_CHECK", f"{name}: {job.get('check')}"))
+        fields = str(job.get("schedule", "")).split()
+        if len(fields) == 5 and fields[1].isdigit() and int(fields[1]) == 2:
+            out.append(Violation("JOB_IN_DST_GAP", f"{name}: 02:xx is skipped or repeated at daylight-saving changes"))
+    return out
 
 
 def model_facing_atlas_tools(policy: Mapping[str, Any] | None = None) -> list[str]:

@@ -101,6 +101,41 @@ that adds `send_message` therefore cannot register it. Credentials are passed
 by **file path** (`env: {..._FILE: /path}`) to a 0600 secret file outside the
 repo, never inline.
 
+### Verified by running Hermes (not only by reading it)
+
+These were found by executing Hermes 0.19.0 in the sandbox and are covered by
+`tests/atlas/test_hermes_compat.py`:
+
+1. **ACP ignores the tool policy.** An ACP session (`hermes acp`, which the
+   Hub's existing chat integration launches) is built with
+   `enabled_toolsets=["hermes-acp"]` and without `agent.disabled_toolsets`.
+   With `agent.disabled_toolsets: [terminal, file, browser, code_execution,
+   delegation, skills]` and `platform_toolsets.acp: [memory]` set, a real ACP
+   agent still had `terminal`, `write_file`, `patch`, `execute_code`,
+   `browser_navigate`, `delegate_task` and `skill_manage`
+   (`acp_adapter/session.py::_make_agent`). **ACP must never run against the
+   Atlas profile.** The policy check fails if `HUB_HERMES_ENABLED=true` points
+   at the Atlas profile, or if the sticky `~/.hermes/active_profile` is
+   `atlas` (which would make a plain `hermes acp` run as Atlas).
+2. **`kanban` is re-added implicitly** on `telegram` and `cron` even with an
+   explicit `platform_toolsets` list. Atlas lists it in
+   `agent.disabled_toolsets`, which those platforms apply.
+3. **`api_server` does not apply `agent.disabled_toolsets`**; only its
+   `platform_toolsets.api_server` list protects it. The policy check therefore
+   subtracts the denylist only on telegram, cron and cli.
+4. **Cron after a daylight-saving change.** `compute_next_run` anchors
+   croniter on the stored last-run time, which carries a fixed UTC offset, so
+   a plain `0 8 * * 0` job runs at 07:00 AEDT on 04/10/2026 and 09:00 AEST on
+   04/04/2027. Atlas's weekly job therefore wakes hourly on Sunday mornings
+   (`0 7-11 * * 0`) and the Hub (`get_check_status("weekly_digest")
+   .digestDueNow`) releases the digest once, at the first run at or after
+   08:00 Sydney. A test drives Hermes' real `compute_next_run` week by week
+   across both DST changes and confirms one digest per Sunday at 08:00.
+
+With the Atlas config, Hermes' own resolver gives:
+`telegram: [atlas-hub, cronjob, memory]`, `api_server: [atlas-hub, cronjob,
+memory]`, `cron: [atlas-hub, memory]`.
+
 ## 5. Telegram topics and sessions
 
 | Fact | Source |

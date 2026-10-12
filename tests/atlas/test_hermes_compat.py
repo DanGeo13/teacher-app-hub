@@ -110,3 +110,98 @@ def test_skill_frontmatter_parses_with_hermes(tmp_path):
         assert name == folder
         assert 0 < description_length <= 1024
         assert has_body
+
+
+def test_installer_creates_cron_jobs_with_explicit_toolsets_in_real_hermes(tmp_path):
+    from skill_harness import approved_agent_dir
+
+    reviewed = approved_agent_dir(tmp_path)
+    root = tmp_path / "root" / ".hermes"
+    (root / "profiles" / "atlas").mkdir(parents=True)
+    data_dir = tmp_path / "hub-data"
+    Database(data_dir / "hub.db")
+    env = {**os.environ, "ATLAS_AGENT_DIR": str(reviewed), "HOME": str(tmp_path / "root")}
+    proc = subprocess.run([HERMES_PYTHON, str(reviewed / "install" / "install_profile.py"), "--hermes-root", str(root),
+                           "--hub-python", sys.executable, "--hub-data-dir", str(data_dir), "--apply"],
+                          capture_output=True, text=True, env=env, timeout=300)
+    assert proc.returncode == 0, proc.stderr[-2000:]
+    home = root / "profiles" / "atlas"
+    out = run_hermes("""
+        import json
+        from cron import jobs
+        with jobs.use_cron_store(__import__('os').environ['HERMES_HOME']):
+            listed = jobs.list_jobs(include_disabled=True)
+        print(json.dumps([{k: j.get(k) for k in ('name', 'skills', 'enabled_toolsets', 'next_run_at', 'schedule')} for j in listed]))
+    """, home)
+    jobs = {j["name"]: j for j in json.loads(out)}
+    assert set(jobs) == {f"atlas:{j['name']}" for j in atlas_policy.load_schedules()}
+    for job in jobs.values():
+        assert job["enabled_toolsets"] and "terminal" not in job["enabled_toolsets"]
+    weekly = jobs["atlas:weekly-digest"]
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    nxt = datetime.fromisoformat(weekly["next_run_at"]).astimezone(ZoneInfo("Australia/Sydney"))
+    # The job wakes hourly on Sunday mornings; the Hub gate releases the digest at 08:00.
+    assert nxt.strftime("%a") == "Sun" and 7 <= nxt.hour <= 11 and nxt.minute == 0
+    check = subprocess.run([HERMES_PYTHON, str(reviewed / "install" / "check_policy.py"), "--hermes-home", str(home)],
+                           capture_output=True, text=True, env=env, timeout=300)
+    assert check.returncode == 0, check.stdout + check.stderr
+
+
+def test_hermes_cron_plus_hub_gate_sends_one_digest_at_0800_across_dst(tmp_path, atlas, clock):
+    """Drive Hermes' REAL next-run calculation for the weekly job week by week
+    across both 2026/27 daylight-saving changes, feeding each run time to the
+    Hub gate. Exactly one digest per Sunday must be released, at 08:00 local."""
+    from datetime import UTC, datetime
+    from zoneinfo import ZoneInfo
+
+    out = run_hermes("""
+        import json, os
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        from cron.jobs import compute_next_run, parse_schedule
+        sched = parse_schedule('0 7-11 * * 0')
+        last = datetime(2026, 9, 13, 11, 0, tzinfo=ZoneInfo('Australia/Sydney')).isoformat()
+        runs = []
+        for _ in range(5 * 33):
+            nxt = compute_next_run(sched, last)
+            runs.append(nxt)
+            # Hermes stores the actual run time in its configured timezone.
+            last = datetime.fromisoformat(nxt).astimezone(ZoneInfo('Australia/Sydney')).isoformat()
+        print(json.dumps(runs))
+    """, make_profile(tmp_path))
+    sydney = ZoneInfo("Australia/Sydney")
+    released = []
+    for value in json.loads(out):
+        clock.moment = datetime.fromisoformat(value).astimezone(UTC)
+        if atlas.get_check_status("weekly_digest").get("digestDueNow"):
+            atlas.log_check(check_name="weekly_digest", outcome="ok")
+            released.append(clock.moment.astimezone(sydney))
+    assert len(released) == len({r.date() for r in released}), "at most one digest per Sunday"
+    assert len(released) >= 30
+    assert all(r.strftime("%a %H:%M") == "Sun 08:00" for r in released), [r.isoformat() for r in released if r.hour != 8]
+    dates = {r.date().isoformat() for r in released}
+    assert {"2026-10-04", "2027-04-04"} <= dates, "both daylight-saving Sundays get their 08:00 digest"
+
+
+def test_hermes_raw_cron_anchor_is_offset_based_documented_upstream_issue(tmp_path):
+    """Records the Hermes 0.19.0 behaviour that the Hub gate works around.
+
+    If Hermes fixes it, this test fails and the workaround can be revisited.
+    """
+    out = run_hermes("""
+        import json, os
+        os.environ['HERMES_TIMEZONE'] = 'Australia/Sydney'
+        import hermes_time; hermes_time.reset_cache() if hasattr(hermes_time, 'reset_cache') else None
+        from cron.jobs import compute_next_run, parse_schedule
+        sched = parse_schedule('0 8 * * 0')
+        res = [compute_next_run(sched, last) for last in ('2026-09-27T09:00:00+10:00', '2027-03-28T09:00:00+11:00')]
+        print(json.dumps(res))
+    """, make_profile(tmp_path))
+    from datetime import UTC, datetime
+
+    first, second = (datetime.fromisoformat(v).astimezone(UTC) for v in json.loads(out))
+    # A naive "0 8 * * 0" job lands at 07:00 AEDT and 09:00 AEST on the DST Sundays.
+    assert first == datetime(2026, 10, 3, 20, 0, tzinfo=UTC)
+    assert second == datetime(2027, 4, 3, 23, 0, tzinfo=UTC)
