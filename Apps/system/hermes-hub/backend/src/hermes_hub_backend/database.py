@@ -10,9 +10,15 @@ from typing import Iterator
 class Database:
     """Small SQLite boundary with explicit migrations and serialised writes."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, migrate: bool = True) -> None:
         self.path = path
         self._write_lock = threading.RLock()
+        if not migrate:
+            # Secondary processes (the atlas-hub MCP server) never migrate:
+            # they open the Hub's existing database and refuse an old schema.
+            if not self.path.is_file():
+                raise RuntimeError(f"Hub database {self.path} does not exist; start the Hub first")
+            return
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.path.parent.chmod(0o700)
         self._migrate()

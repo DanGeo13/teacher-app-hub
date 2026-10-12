@@ -19,6 +19,8 @@ jobs:
         with: { node-version: '22', cache: 'npm', cache-dependency-path: 'Apps/system/hermes-hub/frontend/package-lock.json' }
       - run: bash scripts/bootstrap-dev.sh
       - run: Apps/system/hermes-hub/backend/.venv/bin/pytest
+      - name: Atlas evaluation report (PASS / FAIL / BLOCKED per test)
+        run: Apps/system/hermes-hub/backend/.venv/bin/python scripts/run-atlas-evals.py
       - run: npm --prefix Apps/system/hermes-hub/frontend test
       - run: npm --prefix Apps/system/hermes-hub/frontend run typecheck
       - run: npm --prefix Apps/system/hermes-hub/frontend run build
@@ -51,4 +53,25 @@ jobs:
       - run: npm --prefix Apps/system/hermes-hub/frontend audit --audit-level=high
       - run: Apps/system/hermes-hub/backend/.venv/bin/python -m pip check
 
-  # CI is validation only. It never runs Hermes, Ollama, clasp or deployment actions.
+  atlas-hermes-compat:
+    # Runs the Atlas compatibility tests against the REAL hermes-agent release
+    # (persona scanner, toolset resolver, MCP discovery, skills, cron, DST).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with: { python-version: '3.11' }
+      - uses: actions/setup-node@v5
+        with: { node-version: '22', cache: 'npm', cache-dependency-path: 'Apps/system/hermes-hub/frontend/package-lock.json' }
+      - run: bash scripts/bootstrap-dev.sh
+      - name: Install Hermes Agent 0.19.0 in its own environment
+        run: |
+          python3 -m venv /tmp/hermes-venv
+          /tmp/hermes-venv/bin/pip install "hermes-agent[mcp,cron,acp]==0.19.0"
+      - name: Atlas evaluation against real Hermes
+        env:
+          ATLAS_TEST_HERMES_PYTHON: /tmp/hermes-venv/bin/python
+        run: Apps/system/hermes-hub/backend/.venv/bin/python scripts/run-atlas-evals.py
+
+  # CI is validation only. It never runs a Hermes model session, Ollama, clasp or deployment actions.
+  # atlas-hermes-compat imports the hermes-agent package code (no provider, no session).

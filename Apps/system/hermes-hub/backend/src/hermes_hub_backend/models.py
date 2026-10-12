@@ -242,6 +242,17 @@ class ApprovalRecord(ApiModel):
     consumed_at: datetime | None
     invalidated_at: datetime | None
     invalidation_reason: str | None
+    expires_at: datetime | None = None
+    payload_json: str | None = Field(default=None, exclude=True)
+    summary: str | None = None
+    requester_channel: str | None = None
+    decided_channel: str | None = None
+    rejected_by: str | None = None
+    rejected_at: datetime | None = None
+    expired_at: datetime | None = None
+    execution_status: str | None = None
+    execution_result_json: str | None = Field(default=None, exclude=True)
+    executed_at: datetime | None = None
 
 
 class BackupRecord(ApiModel):

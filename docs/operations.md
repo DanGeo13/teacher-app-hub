@@ -29,4 +29,4 @@ The Hub and local inference do not inherently create model API charges. A runnin
 
 ## Disabled operations
 
-Git commits/pushes, merges, clasp, deployments, external backups and live restore have no execution implementation. `/api/restricted-actions/*` returns `BROKER_NOT_IMPLEMENTED` even if an approval exists. Approval expiry and migration checksum enforcement are not implemented in this scope.
+Git commits/pushes, merges, clasp, deployments, external backups and live restore have no execution implementation. `/api/restricted-actions/*` returns `BROKER_NOT_IMPLEMENTED` even if an approval exists. Approvals expire (24 hours by default); migration checksum enforcement is not implemented in this scope.

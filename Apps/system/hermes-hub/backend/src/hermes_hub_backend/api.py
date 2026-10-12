@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -9,7 +10,10 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
-from .approvals import ApprovalService
+from .atlas.api_routes import atlas_error_response, register_atlas_routes
+from .atlas.host import AtlasHostSettings
+from .atlas.service import AtlasError, AtlasService
+from .atlas.verification import VerificationManager, VerificationRunner
 from .audit import AuditService
 from .auth import AuthService, AuthenticatedSession
 from .backup import BackupService
@@ -46,10 +50,21 @@ def create_app(settings: Settings) -> FastAPI:
     database = Database(settings.database_path)
     auth = AuthService(database, settings.admin_password, settings.session_ttl_seconds)
     registry = RegistryService(database)
-    approvals = ApprovalService(database)
     audit = AuditService(database)
     backups = BackupService(database, settings.backup_dir)
     hermes_sessions = HermesSessionService(database, settings)
+    try:
+        atlas = AtlasService(database, backup_dir=settings.backup_dir)
+        atlas_ready = True
+    except (FileNotFoundError, ValueError) as error:
+        # The Hub keeps working without Atlas; Atlas endpoints answer 503.
+        print(f"Atlas disabled: agent definition not found ({error}). Set ATLAS_AGENT_DIR.", file=sys.stderr)
+        atlas = AtlasService.unconfigured(database, backup_dir=settings.backup_dir)
+        atlas_ready = False
+    approvals = atlas.approvals
+    atlas_verification = VerificationManager(
+        lambda: VerificationRunner(atlas, AtlasHostSettings.from_env())
+    )
 
     app = FastAPI(
         title="Hermes Hub API",
@@ -65,6 +80,8 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.approvals = approvals
     app.state.backups = backups
     app.state.hermes_sessions = hermes_sessions
+    app.state.atlas = atlas
+    app.state.atlas_ready = atlas_ready
 
     @app.middleware("http")
     async def security_headers(request: Request, call_next):
@@ -94,6 +111,10 @@ def create_app(settings: Settings) -> FastAPI:
             status_code=409,
             content={"error": {"code": "REVISION_CONFLICT", "message": str(error)}},
         )
+
+    @app.exception_handler(AtlasError)
+    async def atlas_handler(_request: Request, error: AtlasError):
+        return atlas_error_response(error)
 
     @app.exception_handler(ApprovalError)
     async def approval_handler(_request: Request, error: ApprovalError):
@@ -375,6 +396,7 @@ def create_app(settings: Settings) -> FastAPI:
             },
         )
 
+    register_atlas_routes(router, atlas, atlas_verification, require_session, require_csrf)
     app.include_router(router)
 
     dist = settings.frontend_dist

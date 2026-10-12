@@ -10,3 +10,7 @@
 - [GAS integration](gas-integration.md)
 - [Acceptance results](acceptance-results.md)
 - [Known limitations](known-limitations.md)
+- [Atlas agent](ATLAS_AGENT.md)
+- [Atlas tools and skills](TOOLS_AND_SKILLS.md)
+- [Hermes integration findings](AGENT_INTEGRATION.md)
+- [Atlas implementation status](IMPLEMENTATION_STATUS.md)

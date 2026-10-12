@@ -197,3 +197,7 @@ dt { color: var(--muted); } dd { margin: 0; text-align: right; overflow-wrap: an
 @media (prefers-reduced-motion: no-preference) {
   .button, .nav-link, .app-card { transition: transform .16s ease, box-shadow .16s ease, background .16s ease; }
 }
+
+.atlas-approval { display: grid; gap: 6px; }
+.atlas-payload { margin: 0; padding: 10px; max-height: 220px; overflow: auto; background: #f4f4ef; border-radius: 8px; font-size: .72rem; white-space: pre-wrap; word-break: break-word; }
+.atlas-actions { display: flex; gap: 8px; }

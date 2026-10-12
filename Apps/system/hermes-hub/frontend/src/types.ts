@@ -97,3 +97,48 @@ export interface ApiErrorShape {
   error?: { code?: string; message?: string }
   detail?: string | { code?: string; message?: string }
 }
+
+export interface AtlasApproval {
+  id: string
+  action: string
+  target: string
+  status: string
+  summary: string | null
+  payload: Record<string, unknown> | null
+  contentHash: string
+  requestedBy: string
+  expiresAt: string | null
+  expiresLocal: string | null
+}
+
+export interface AtlasCheck {
+  check: string
+  state: 'ok' | 'no_change' | 'failed' | 'stale' | 'never_run'
+  text: string
+}
+
+export interface AtlasHealth {
+  overall: 'ok' | 'attention'
+  problems: string[]
+  checks: AtlasCheck[]
+  lastBackupAt: string | null
+  openReviewItems: number
+}
+
+export interface AtlasDigest {
+  generatedFor: string
+  text: string
+  sections: { key: string; title: string; groups: { name: string; items: { text: string }[] }[] }[]
+}
+
+export type VerificationStatus = 'PASS' | 'FAIL' | 'BLOCKED'
+
+export interface AtlasVerification {
+  runId?: string
+  status: 'never_run' | 'RUNNING' | 'finished' | 'error'
+  steps: { name: string; status: VerificationStatus; detail: string }[]
+  host?: { platform: string; machine: string; android: boolean }
+  verdict?: string
+  error?: string
+  finishedAt?: string
+}

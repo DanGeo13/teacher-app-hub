@@ -1,0 +1,103 @@
+{
+  "bill-and-payment-monitor": {
+    "trigger": [
+      "What bills are due this week?",
+      "Is the electricity bill paid yet?",
+      "Anything overdue on the water bill?"
+    ],
+    "unrelated": [
+      "Pay it for me from my bank account",
+      "When is the car service due?",
+      "Reply to Sam about Saturday"
+    ]
+  },
+  "car-maintenance-tracker": {
+    "trigger": [
+      "The odometer is at 48,200 km now",
+      "When is the next car service due?",
+      "Is the logbook service booked?"
+    ],
+    "unrelated": [
+      "Book it for me at the mechanic",
+      "Is the electricity bill paid?",
+      "What's on this weekend?"
+    ]
+  },
+  "_none": {
+    "unrelated": [
+      "Write me a poem about the ocean",
+      "What's the capital of France?",
+      "Summarise this school report for my Year 9 class"
+    ]
+  },
+  "payment-assistant": {
+    "trigger": [
+      "How do I pay the water bill? What's the BPAY reference?",
+      "I have paid the electricity",
+      "Pay it for me please"
+    ],
+    "unrelated": [
+      "What bills are due this week?",
+      "When is the car service due?",
+      "What's my card number?"
+    ]
+  },
+  "social-relationship-assistant": {
+    "trigger": [
+      "I need to reply to Sam about Saturday",
+      "Mum's birthday is on 03/11",
+      "I promised to catch up with Priya"
+    ],
+    "unrelated": [
+      "Write a report for the parent of a student in my Year 9 class",
+      "Is the electricity bill paid?",
+      "Weekly digest please"
+    ]
+  },
+  "message-evidence-monitor": {
+    "trigger": [
+      "Has the payment confirmation from Origin come through?",
+      "Did they confirm? Check the receipt"
+    ],
+    "unrelated": [
+      "Draft a reply to the plumber",
+      "Summarise my inbox",
+      "Start recording"
+    ]
+  },
+  "audio-action-capture": {
+    "trigger": [
+      "What did I say in this morning's voice note?",
+      "Process the voice memo from the car"
+    ],
+    "unrelated": [
+      "Start recording and keep listening",
+      "Record the meeting secretly",
+      "Is the water bill due?"
+    ]
+  },
+  "weekly-what-matters-report": {
+    "trigger": [
+      "What matters this week?",
+      "Send me the weekly digest",
+      "Give me my week ahead"
+    ],
+    "unrelated": [
+      "Send the digest to my wife",
+      "When is the logbook service?",
+      "What did I say in the voice note?"
+    ]
+  },
+  "system-health-and-recovery": {
+    "trigger": [
+      "Is Atlas working?",
+      "Did the checks run last night?",
+      "Did the backup work? Atlas status please"
+    ],
+    "unrelated": [
+      "How is my health? Should I see a doctor?",
+      "Grant access to my work mail",
+      "What bills are overdue?"
+    ]
+  }
+}

@@ -28,6 +28,6 @@
 
 The bootstrap password boundary is deliberately a single-administrator, personal-Hub intent gate. It is not a multi-user identity system and has no MFA, lockout or external identity lifecycle. The password exists in process environment; use a Codespaces secret and never place it in `.env.example` or tracked files. The scanner is defence in depth, not proof that arbitrary sensitive data is absent.
 
-Approval expiry and migration checksums are intentionally out of the current hardening scope. External-write brokers remain disabled; no approval authorises an operation until a constrained broker exists.
+Approvals carry an expiry and can only be decided on a human channel (dashboard, companion app, or Dan's Telegram user id). Migration checksums are still out of scope. External-write brokers remain disabled; no approval authorises an operation until a constrained broker exists.
 
 The current process runs under the developer account. A future coding-agent environment still needs credential isolation and a constrained external-write broker before powerful tools can be enabled.
