@@ -12,10 +12,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with: { python-version: '3.11' }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with: { node-version: '22', cache: 'npm', cache-dependency-path: 'Apps/system/hermes-hub/frontend/package-lock.json' }
       - run: bash scripts/bootstrap-dev.sh
       - run: Apps/system/hermes-hub/backend/.venv/bin/pytest
@@ -41,7 +41,7 @@ jobs:
         run: npm --prefix Apps/system/hermes-hub/frontend run test:e2e
       - name: Upload browser failure screenshots only
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: hermes-hub-browser-failure-pngs
           path: Apps/system/hermes-hub/frontend/test-results/**/*.png
