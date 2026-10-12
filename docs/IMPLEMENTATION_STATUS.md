@@ -1,6 +1,6 @@
 # Atlas implementation status
 
-Last updated 12/10/2026. Branch `claude/atlas-operations-agent-7debvp`.
+Last updated 12/10/2026 (product-readiness review). Branch `claude/atlas-operations-agent-7debvp`.
 
 **Atlas is not yet operational.** Nothing has run on the Pixel 7 Pro host.
 Everything runnable in CI is built and tested, including against the real
@@ -35,14 +35,38 @@ device or Dan), **NOT BUILT** (deliberately out of scope so far).
 
 ## Test results (sandbox, 12/10/2026)
 
-- Backend + Atlas pytest: 236 passed, 9 skipped (skips are the real-Hermes
+- Backend + Atlas pytest: 262 passed, 9 skipped (skips are the real-Hermes
   and existing integration tests, reported BLOCKED without Hermes).
-- Atlas evaluation with real hermes-agent 0.19.0: **PASS 172 · FAIL 0 · BLOCKED 0**.
-- Atlas evaluation without Hermes: PASS 165 · FAIL 0 · BLOCKED 7.
-- Frontend: unit tests, typecheck and build pass; Playwright e2e 5 passed
+- Atlas evaluation with real hermes-agent 0.19.0: **PASS 197 · FAIL 0 · BLOCKED 0** (after the review).
+- Atlas evaluation without Hermes: real-Hermes tests report BLOCKED, never PASS.
+- Frontend: 10 unit tests, typecheck and build pass; Playwright e2e 5 passed
   (run against the sandbox's Chromium; the pinned Playwright browser is not
   installed in the sandbox, CI installs it).
 - Secret scan passes.
+
+## Product-readiness review (12/10/2026)
+
+Reviewed with the tools in [supabase/agent-skills](https://github.com/supabase/agent-skills):
+the Agent Skills standard and its `skills add` installer, and the
+`supabase-postgres-best-practices` rules that apply outside Postgres. The
+Supabase product skill and the Postgres-only rules (RLS, pooling,
+pg_stat_statements) do not apply: the Hub uses SQLite.
+
+| Area | Finding | Fix |
+|---|---|---|
+| Skills standard | `version` was a non-standard top-level field; every body repeated a "When to use" section that belongs in the description | moved to `metadata.version`; trigger context only in descriptions; tests enforce the standard; all 8 skills install with `npx skills add` |
+| FK indexes | 3 foreign keys unindexed | indexed |
+| Missing indexes | approvals by target, evidence by record, audio queue, and the verification poll scanning all of `audit_events` every 2 s | indexed; tests assert every hot query uses an index |
+| Constraints / types | status, action and source fields accepted any text; negative amounts and non-ISO dates were storable | CHECK constraints (null-safe date checks) |
+| Timestamps | approval-card bookkeeping wrote SQLite `datetime('now')` format, unlike every other ISO-8601 UTC timestamp | uses the service clock |
+| N+1 / pagination | evidence matching scanned every record per evidence item; obligations list unbounded | SQL filter by counterparty; `limit`/`offset` |
+| Statistics | no planner maintenance | nightly backup runs `PRAGMA optimize` |
+| Approvals | an odometer reading or accepting a proposed record invalidated unrelated pending approvals | revision only tracks approval-relevant fields |
+| Alerts / digest | bills Dan reported paid still alerted and showed as OVERDUE | listed as "payment reported, needs confirming evidence" |
+| API | every Atlas error returned 409 | 400 input, 404 missing, 409 conflict, 503 not configured |
+| Startup | the whole Hub failed to start if `agent/atlas` was missing | Hub starts; Atlas endpoints answer 503; MCP server prints a clear message |
+| Tool schemas | union JSON types rejected by some model providers | one type per property |
+| Frontend CI | unquoted `--exclude e2e/**` silently skipped every unit test once a second e2e file existed | glob quoted; guard test |
 
 ## Live verification on the Pixel 7 host
 
