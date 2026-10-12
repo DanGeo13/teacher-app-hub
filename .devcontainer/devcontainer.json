@@ -14,6 +14,6 @@
     "9119": { "label": "Official Hermes Dashboard", "visibility": "private", "onAutoForward": "silent" }
   },
   "postCreateCommand": "bash scripts/bootstrap-dev.sh",
-  "postStartCommand": "bash scripts/start-codespace.sh",
+  "postStartCommand": "bash scripts/launch-codespace.sh",
   "remoteUser": "vscode"
 }
