@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-_F = r"(?:\w+\s+){0,8}"
+_F = r"(?:\S+\s+){0,8}"
 PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("ignore_instructions", re.compile(rf"\b(ignore|disregard|forget|override)\s+{_F}(previous|prior|above|earlier|all|your|system)\s+{_F}(instructions|rules|prompt|guidelines|policy)", re.I)),
     ("role_hijack", re.compile(r"\b(you are now|act as|pretend to be|new instructions|system prompt|developer mode)\b", re.I)),

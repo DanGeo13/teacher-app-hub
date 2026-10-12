@@ -728,18 +728,28 @@ class AtlasService:
         if row["action"] not in INTERNAL_ACTIONS:
             raise AtlasError("UNKNOWN_ACTION", f"no executor for '{row['action']}'")
 
-        with self.database.write() as connection:
-            fresh = dict(connection.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone())
-            if fresh["status"] != "approved":
-                raise AtlasError("APPROVAL_NOT_USABLE", f"approval is {fresh['status']}")
-            result = self._run_internal(connection, fresh, payload)
-            self.approvals.consume_in(connection, fresh, actor)
-            connection.execute(
-                "UPDATE approvals SET execution_status = 'succeeded', execution_result_json = ?, executed_at = ? WHERE id = ?",
-                (json.dumps(result), _iso(self._now()), approval_id),
-            )
-            self._audit(connection, "atlas.action.executed", "approval", approval_id,
-                        {"action": fresh["action"], "result": result})
+        try:
+            # One transaction: any failure rolls back every partial change.
+            with self.database.write() as connection:
+                fresh = dict(connection.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone())
+                if fresh["status"] != "approved":
+                    raise AtlasError("APPROVAL_NOT_USABLE", f"approval is {fresh['status']}")
+                result = self._run_internal(connection, fresh, payload)
+                self.approvals.consume_in(connection, fresh, actor)
+                connection.execute(
+                    "UPDATE approvals SET execution_status = 'succeeded', execution_result_json = ?, executed_at = ? WHERE id = ?",
+                    (json.dumps(result), _iso(self._now()), approval_id),
+                )
+                self._audit(connection, "atlas.action.executed", "approval", approval_id,
+                            {"action": fresh["action"], "result": result})
+        except AtlasError as failure:
+            # Recorded in its own transaction so the invalidation is never rolled back.
+            with self.database.write() as connection:
+                if failure.details.get("invalidate"):
+                    self.approvals.invalidate_in(connection, approval_id, failure.details["invalidate"], actor)
+                self._audit(connection, "atlas.action.failed", "approval", approval_id,
+                            {"code": failure.code, "message": failure.message})
+            raise
         return {"executed": True, "idempotentReplay": False, "result": result}
 
     def _run_internal(self, connection, approval: Mapping[str, Any], payload: Mapping[str, Any]) -> dict[str, Any]:
@@ -750,8 +760,8 @@ class AtlasService:
         if approval["target"] != f"atlas:{record['id']}":
             raise AtlasError("TARGET_MISMATCH", "approval target does not match the record")
         if record["revision"] != payload["recordRevision"]:
-            self.approvals.invalidate_in(connection, approval["id"], "record changed after approval was requested", AGENT_ACTOR)
-            raise AtlasError("RECORD_CHANGED", "the record changed after approval; approval invalidated, ask again")
+            raise AtlasError("RECORD_CHANGED", "the record changed after approval; approval invalidated, ask again",
+                             invalidate="record changed after approval was requested")
         if action == "convert_audio_proposal":
             connection.execute(
                 "UPDATE atlas_records SET review_state = 'active', revision = revision + 1, updated_at = ? WHERE id = ?",
@@ -761,7 +771,8 @@ class AtlasService:
             return {"recordId": record["id"], "reviewState": "active"}
         # confirm_status / confirm_paid
         if record["status"] != payload["fromStatus"]:
-            raise AtlasError("RECORD_CHANGED", "record status changed after approval")
+            raise AtlasError("RECORD_CHANGED", "record status changed after approval; approval invalidated",
+                             invalidate="record status changed after approval")
         transition, evidence_rows, results = self._validate_transition(
             connection, record, payload["toStatus"], list(payload["evidenceIds"])
         )
@@ -1076,6 +1087,7 @@ class AtlasService:
             return {"status": "failed"}
         segments = audio_mod.merge_chunks(json.loads(row["chunks_json"]))
         valid_stamps = {s.to_dict()["timestamp"] for s in segments}
+        flagged = {s.to_dict()["timestamp"]: injection.screen(s.text) for s in segments}
         results = []
         for proposal in proposals or []:
             stamp = proposal.get("audio_timestamp")
@@ -1087,6 +1099,13 @@ class AtlasService:
                 person=proposal.get("person"), due_date=proposal.get("due_date"), kind=proposal.get("kind", "task"),
                 audio_id=audio_id, audio_timestamp=stamp, confidence=proposal.get("confidence"),
             ))
+            if flagged.get(stamp):
+                record_id = results[-1]["record"]["id"]
+                with self.database.write() as connection:
+                    connection.execute("UPDATE atlas_records SET suspicious = 1 WHERE id = ?", (record_id,))
+                    self._audit(connection, "suspicious_content", "atlas_record", record_id,
+                                {"source": f"audio:{audio_id}@{stamp}", "findings": flagged[stamp]})
+                results[-1]["record"]["suspicious"] = True
         with self.database.write() as connection:
             connection.execute(
                 "UPDATE atlas_audio_items SET status = 'processed', processed_at = ? WHERE id = ?",
