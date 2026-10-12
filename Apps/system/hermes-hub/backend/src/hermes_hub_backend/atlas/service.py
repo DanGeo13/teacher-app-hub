@@ -279,6 +279,13 @@ class AtlasService:
             ).fetchall()
         return {"approvals": [self.present_approval(dict(r)) for r in rows]}
 
+    def approval_view(self, approval_id: str) -> dict[str, Any]:
+        with self.database.read() as connection:
+            row = connection.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone()
+        if row is None:
+            raise AtlasError("NOT_FOUND", "approval not found")
+        return self.present_approval(dict(row))
+
     def present_approval(self, row: Mapping[str, Any]) -> dict[str, Any]:
         payload = json.loads(row["payload_json"]) if row.get("payload_json") else None
         expires = row.get("expires_at")
@@ -683,7 +690,7 @@ class AtlasService:
 
     # ------------------------------------------------------------- execution
 
-    def execute_approved_action(self, approval_id: str) -> dict[str, Any]:
+    def execute_approved_action(self, approval_id: str, actor: str = AGENT_ACTOR) -> dict[str, Any]:
         with self.database.write() as connection:
             row = connection.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone()
             if row is None:
@@ -726,7 +733,7 @@ class AtlasService:
             if fresh["status"] != "approved":
                 raise AtlasError("APPROVAL_NOT_USABLE", f"approval is {fresh['status']}")
             result = self._run_internal(connection, fresh, payload)
-            self.approvals.consume_in(connection, fresh, AGENT_ACTOR)
+            self.approvals.consume_in(connection, fresh, actor)
             connection.execute(
                 "UPDATE approvals SET execution_status = 'succeeded', execution_result_json = ?, executed_at = ? WHERE id = ?",
                 (json.dumps(result), _iso(self._now()), approval_id),
