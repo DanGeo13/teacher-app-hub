@@ -1,8 +1,8 @@
 ---
 name: weekly-what-matters-report
 description: Produce Dan's Sunday 8:00 AM weekly digest from the Hub, in the fixed section order, for Telegram, voice or the dashboard. Use for the weekly digest schedule or when Dan asks for his week at a glance. Not for single-bill questions, sending the digest to anyone else, or adding items that are not in the Hub.
-version: 1.0.0
 metadata:
+  version: "1.0.0"
   hermes:
     tags: [atlas, digest]
     related_skills: [system-health-and-recovery]
@@ -13,11 +13,6 @@ metadata:
 ---
 
 # Weekly what-matters report
-
-## When to use
-
-- The Sunday 08:00 Australia/Sydney schedule.
-- "What matters this week?"
 
 ## When not to use
 

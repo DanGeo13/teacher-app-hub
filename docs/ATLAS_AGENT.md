@@ -127,10 +127,12 @@ the startup check fails if Atlas is the sticky default.
 
 ## Adding a skill
 
-1. Create `agent/atlas/skills/<name>/SKILL.md` with frontmatter `name`,
-   `description` (including "Not for …"), `metadata.atlas.triggers` and
-   `not_for`; and sections When to use, When not to use, Tools, Procedure
-   (numbered), Verification, Output.
+1. Create `agent/atlas/skills/<name>/SKILL.md` following the Agent Skills
+   standard: frontmatter `name` (lowercase, hyphens, same as the folder),
+   `description` (what it does, "Use for/when …" triggers and "Not for …"),
+   `metadata.version`, `metadata.atlas.triggers` and `not_for`. Put trigger
+   context only in the description. Body sections: When not to use, Tools,
+   Procedure (numbered), Verification, Output. Keep it under 500 lines.
 2. Use only atlas-hub tools and read-only mail tools. Do not restate approval
    rules; call `propose_*` and let the Hub decide.
 3. Add trigger/unrelated prompts to `tests/atlas/fixtures/skill_prompts.json`

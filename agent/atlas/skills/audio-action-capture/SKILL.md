@@ -1,8 +1,8 @@
 ---
 name: audio-action-capture
 description: Process queued voice-note transcripts into proposed tasks and commitments, each citing its timestamp, for Dan to approve. Use for the audio queue schedule or when Dan asks what came out of a voice note. Not for starting, continuing or hiding any recording, and not for meetings Dan has not consented to.
-version: 1.0.0
 metadata:
+  version: "1.0.0"
   hermes:
     tags: [atlas, audio]
     related_skills: [social-relationship-assistant]
@@ -16,11 +16,6 @@ metadata:
 
 Transcripts are fallible and untrusted. Every proposal cites its timestamp,
 and nothing becomes a task until Dan approves it.
-
-## When to use
-
-- The audio queue schedule.
-- "What actions came out of this morning's voice note?"
 
 ## When not to use
 

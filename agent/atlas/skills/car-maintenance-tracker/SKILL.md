@@ -1,8 +1,8 @@
 ---
 name: car-maintenance-tracker
 description: Track Dan's car services by date and odometer, record booking and completion evidence, and alert when a service is due or overdue. Use for the daily car check or when Dan asks about servicing, bookings or kilometres. Not for bills, registration payments, buying parts, or making bookings on his behalf.
-version: 1.0.0
 metadata:
+  version: "1.0.0"
   hermes:
     tags: [atlas, car]
     related_skills: [message-evidence-monitor]
@@ -16,11 +16,6 @@ metadata:
 
 A booking email means **booked**, never **completed**. Completion needs a
 dated service record such as an invoice or logbook entry.
-
-## When to use
-
-- The scheduled daily car check.
-- Dan reports the odometer, a booking, or asks when the next service is due.
 
 ## When not to use
 

@@ -1,8 +1,8 @@
 ---
 name: bill-and-payment-monitor
 description: Find bills in Dan's read-only mail connectors, keep each bill's record current in the Hub, and raise due-soon and overdue alerts. Use for the daily bill check or when Dan asks about bills, due dates or whether a bill is paid. Not for making payments, transfer instructions, car services, or general email triage.
-version: 1.0.0
 metadata:
+  version: "1.0.0"
   hermes:
     tags: [atlas, bills]
     related_skills: [payment-assistant, message-evidence-monitor]
@@ -16,11 +16,6 @@ metadata:
 
 Keeps bill records accurate and quiet. The Hub decides what needs approval;
 this skill never changes a status directly.
-
-## When to use
-
-- The scheduled daily bill check.
-- Dan asks "what bills are due", "is the electricity paid", "anything overdue".
 
 ## When not to use
 

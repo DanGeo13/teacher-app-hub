@@ -1,8 +1,8 @@
 ---
 name: system-health-and-recovery
 description: Nightly backup and health check for Atlas itself, reporting failed or stale checks, expired authorisation, unprocessed audio and failed backups, with plain recovery steps. Use for the nightly schedule or when Dan asks whether Atlas is working. Not for Dan's own health, the car's condition, or fixing connectors by changing permissions.
-version: 1.0.0
 metadata:
+  version: "1.0.0"
   hermes:
     tags: [atlas, health]
     related_skills: [weekly-what-matters-report]
@@ -15,11 +15,6 @@ metadata:
 # System health and recovery
 
 "Nothing changed" and "the check did not run" must never read the same.
-
-## When to use
-
-- The nightly backup and health schedule.
-- "Is Atlas working?", "Did the bill check run?"
 
 ## When not to use
 

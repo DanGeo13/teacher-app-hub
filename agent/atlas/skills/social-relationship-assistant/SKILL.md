@@ -1,8 +1,8 @@
 ---
 name: social-relationship-assistant
 description: Keep track of Dan's commitments to people (replies owed, catch-ups, birthdays) and prepare message drafts for his approval. Use when Dan mentions owing someone a reply, a promise to a person, or an upcoming birthday. Not for sending anything, bills, car services, or any student or school data.
-version: 1.0.0
 metadata:
+  version: "1.0.0"
   hermes:
     tags: [atlas, people]
     related_skills: [weekly-what-matters-report]
@@ -12,11 +12,6 @@ metadata:
 ---
 
 # Social and relationship assistant
-
-## When to use
-
-- "I need to reply to Sam about Saturday", "Remind me Mum's birthday is 03/11".
-- "Draft a message to Priya saying I'll be late."
 
 ## When not to use
 

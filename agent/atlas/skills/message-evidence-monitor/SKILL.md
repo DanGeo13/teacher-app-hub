@@ -1,8 +1,8 @@
 ---
 name: message-evidence-monitor
 description: Scheduled pass that reads new messages from Dan's read-only connectors, stores receipts, confirmations and replies as evidence, and asks the Hub to advance records only where the evidence matches. Use for the evidence-matching schedule or when Dan asks whether a confirmation or receipt has arrived. Not for drafting replies, paying, or summarising inboxes.
-version: 1.0.0
 metadata:
+  version: "1.0.0"
   hermes:
     tags: [atlas, evidence]
     related_skills: [bill-and-payment-monitor, car-maintenance-tracker]
@@ -16,11 +16,6 @@ metadata:
 
 Evidence can justify a change; it never makes one. Notification capture is
 not full message history, so say which source you read.
-
-## When to use
-
-- The evidence-matching schedule (every 30 minutes by default).
-- "Has the receipt from Origin come through?"
 
 ## When not to use
 

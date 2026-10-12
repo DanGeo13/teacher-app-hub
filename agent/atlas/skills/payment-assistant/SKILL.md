@@ -1,8 +1,8 @@
 ---
 name: payment-assistant
 description: Help Dan pay a bill himself by laying out the exact payee, amount, reference and due date, and record his report that he has paid. Use when Dan asks how to pay a bill, for payment details, or says he has paid. Not for moving money, logging into banking, storing card or account numbers, or confirming a bill as paid.
-version: 1.0.0
 metadata:
+  version: "1.0.0"
   hermes:
     tags: [atlas, payments]
     related_skills: [bill-and-payment-monitor, message-evidence-monitor]
@@ -15,12 +15,6 @@ metadata:
 
 Atlas has no banking access. Dan makes every payment himself; this skill
 gives him correct details and records what he reports.
-
-## When to use
-
-- "How do I pay the water bill?", "What's the BPAY reference?"
-- "Pay it for me": explain that Atlas cannot pay, then give the manual steps.
-- "I've paid the electricity": record his report.
 
 ## When not to use
 

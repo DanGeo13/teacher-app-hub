@@ -40,9 +40,16 @@ def test_skill_follows_verified_hermes_format(name):
     assert fm["name"] == name and len(name) <= 64
     assert 0 < len(fm["description"]) <= 1024
     assert "Not for" in fm["description"], "description must state the negative boundary"
+    assert re.search(r"\bUse (for|when)\b", fm["description"]), "trigger context belongs in the description"
+    # Agent Skills standard (agentskills.io, as enforced by supabase/agent-skills)
+    assert re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name)
+    assert set(fm) <= {"name", "description", "license", "compatibility", "metadata", "allowed-tools"}
+    assert re.fullmatch(r"\d+\.\d+\.\d+", fm["metadata"]["version"])
+    assert "## When to use" not in body, "the body loads after triggering; triggers go in the description"
+    assert len(body.splitlines()) < 500
     atlas = fm["metadata"]["atlas"]
     assert atlas["triggers"] and atlas["not_for"]
-    for heading in ("## When to use", "## When not to use", "## Tools", "## Procedure", "## Verification", "## Output"):
+    for heading in ("## When not to use", "## Tools", "## Procedure", "## Verification", "## Output"):
         assert heading in body, f"{name} lacks '{heading}'"
     steps = re.findall(r"^(\d+)\. ", body.split("## Procedure", 1)[1].split("## Verification", 1)[0], re.M)
     assert [int(s) for s in steps] == list(range(1, len(steps) + 1)) and len(steps) >= 3, "ordered procedure"
