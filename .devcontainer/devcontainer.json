@@ -10,9 +10,10 @@
   },
   "forwardPorts": [9120, 9119],
   "portsAttributes": {
-    "9120": { "label": "Hermes Hub", "visibility": "private", "onAutoForward": "notify" },
+    "9120": { "label": "Hermes Hub", "visibility": "private", "onAutoForward": "openBrowser" },
     "9119": { "label": "Official Hermes Dashboard", "visibility": "private", "onAutoForward": "silent" }
   },
   "postCreateCommand": "bash scripts/bootstrap-dev.sh",
+  "postStartCommand": "bash scripts/start-codespace.sh",
   "remoteUser": "vscode"
 }

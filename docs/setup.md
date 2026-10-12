@@ -1,5 +1,15 @@
 # Setup
 
+## Quick start in GitHub Codespaces
+
+For the browser-first launch, create a Codespace from this repository and set the administrator password as a Codespaces secret named `HUB_ADMIN_PASSWORD` before launching it. Use a unique password of at least 16 characters; do not add it to a repository file or variable. The backend requires this password before it starts, so the browser cannot safely create it on first launch.
+
+After the Codespace is created, `postStartCommand` builds the frontend if needed and starts the Hub backend. Port 9120 stays private and opens in the browser. Sign in with the password stored in the Codespaces secret. The app and API are served together from that port.
+
+To configure the secret, open the repository's Codespaces settings, add `HUB_ADMIN_PASSWORD`, then create or restart the Codespace. The Codespace must have access to the secret. GitHub's secret availability can depend on repository and organisation policy.
+
+The Codespace can stop when idle. Reopen or restart it to use the Hub; the app is not continuously hosted when the Codespace is stopped. Its registry and session data live in `/workspaces/.hermes-hub`, outside the Git checkout. Keep port 9120 private. This setup does not install or enable Hermes/Ollama and does not configure a public deployment.
+
 ## Development sandbox
 
 Requirements observed here: Python 3.11, Node 22 and npm 10. Runtime data must be outside the repository.
