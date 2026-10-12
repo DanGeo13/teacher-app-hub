@@ -73,4 +73,5 @@ jobs:
           ATLAS_TEST_HERMES_PYTHON: /tmp/hermes-venv/bin/python
         run: Apps/system/hermes-hub/backend/.venv/bin/python scripts/run-atlas-evals.py
 
-  # CI is validation only. It never runs Hermes, Ollama, clasp or deployment actions.
+  # CI is validation only. It never runs a Hermes model session, Ollama, clasp or deployment actions.
+  # atlas-hermes-compat imports the hermes-agent package code (no provider, no session).

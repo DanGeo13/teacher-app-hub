@@ -13,7 +13,9 @@ Hermes Hub is an authenticated browser control panel for persistent teaching and
 - Approval records bound to action, target and content hash; external writes fail closed.
 - Hardening coverage for exact Origins, expired sessions, safe snapshots and a four-scenario Chromium browser suite.
 
-The hardening validation remains review-only: it does not enable external-write brokers, approval expiry or migration checksums, and it does not rebuild or alter an existing Codespace automatically.
+The hardening validation remains review-only: it does not enable external-write brokers or migration checksums, and it does not rebuild or alter an existing Codespace automatically. Approvals now expire.
+
+**Atlas**, Dan's personal operations agent on Hermes, lives in `agent/atlas/` and `mcp/atlas-hub/`. Start with [docs/ATLAS_AGENT.md](docs/ATLAS_AGENT.md); status is in [docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
 
 Start with [docs/setup.md](docs/setup.md). Read [docs/evidence.md](docs/evidence.md) and [docs/known-limitations.md](docs/known-limitations.md) before enabling any integration.
 
