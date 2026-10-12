@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getRuntime, logout, restoreSession, SESSION_EXPIRED_EVENT } from './api'
+import { Atlas } from './components/Atlas'
 import { Dashboard } from './components/Dashboard'
 import { Login } from './components/Login'
 import { Maintenance } from './components/Maintenance'
@@ -7,10 +8,10 @@ import { RegistryPage } from './components/RegistryPage'
 import { applyPwaUpdate, registerPwa } from './pwa'
 import type { RuntimeState, SessionState } from './types'
 
-type Page = 'dashboard' | 'teacher' | 'lifestyle' | 'maintenance'
-const pages: Page[] = ['dashboard', 'teacher', 'lifestyle', 'maintenance']
-const labels: Record<Page, string> = { dashboard: 'Dashboard', teacher: 'Teacher Hub', lifestyle: 'Lifestyle Hub', maintenance: 'Maintenance' }
-const icons: Record<Page, string> = { dashboard: '◫', teacher: 'T', lifestyle: 'L', maintenance: '⌁' }
+type Page = 'dashboard' | 'atlas' | 'teacher' | 'lifestyle' | 'maintenance'
+const pages: Page[] = ['dashboard', 'atlas', 'teacher', 'lifestyle', 'maintenance']
+const labels: Record<Page, string> = { dashboard: 'Dashboard', atlas: 'Atlas', teacher: 'Teacher Hub', lifestyle: 'Lifestyle Hub', maintenance: 'Maintenance' }
+const icons: Record<Page, string> = { dashboard: '◫', atlas: 'A', teacher: 'T', lifestyle: 'L', maintenance: '⌁' }
 
 function pageFromHash(): Page {
   const candidate = window.location.hash.replace(/^#\/?/, '') as Page
@@ -98,6 +99,7 @@ export default function App() {
       {sessionError && <div className="offline-banner" role="alert">{sessionError}</div>}
       {update && <div className="update-banner" role="status"><span>A Hub update is ready.</span><button onClick={() => applyPwaUpdate(update)}>Reload and update</button></div>}
       {page === 'dashboard' && <Dashboard runtime={runtime} runtimeError={runtimeError} onRefresh={() => void refreshRuntime()} />}
+      {page === 'atlas' && <Atlas />}
       {page === 'teacher' && <RegistryPage hub="teaching" />}
       {page === 'lifestyle' && <RegistryPage hub="personal" />}
       {page === 'maintenance' && <Maintenance runtime={runtime} onRefresh={() => void refreshRuntime()} />}

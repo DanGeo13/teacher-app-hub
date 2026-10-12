@@ -1,4 +1,4 @@
-import type { ApiErrorShape, AppInput, AppRecord, HermesSessionRecord, HubName, RuntimeState, SessionState } from './types'
+import type { ApiErrorShape, AppInput, AppRecord, AtlasApproval, AtlasDigest, AtlasHealth, AtlasVerification, HermesSessionRecord, HubName, RuntimeState, SessionState } from './types'
 
 let csrfToken: string | null = null
 export const SESSION_EXPIRED_EVENT = 'hermes:session-expired'
@@ -110,4 +110,31 @@ export function listHermesSessions(): Promise<HermesSessionRecord[]> {
 
 export function createLocalBackup(): Promise<{ filename: string; sha256: string; createdAt: string }> {
   return request('/api/backups/local', { method: 'POST' })
+}
+
+export function listAtlasApprovals(): Promise<{ approvals: AtlasApproval[] }> {
+  return request('/api/atlas/approvals')
+}
+
+export function decideAtlasApproval(id: string, decision: 'approve' | 'reject', contentHash: string): Promise<Record<string, unknown>> {
+  return request(`/api/atlas/approvals/${encodeURIComponent(id)}/decide`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, contentHash, channel: 'dashboard' }),
+  })
+}
+
+export function getAtlasHealth(): Promise<AtlasHealth> {
+  return request('/api/atlas/health')
+}
+
+export function getAtlasDigest(): Promise<AtlasDigest> {
+  return request('/api/atlas/digest?channel=dashboard')
+}
+
+export function startAtlasVerification(): Promise<AtlasVerification> {
+  return request('/api/atlas/verification/run', { method: 'POST' })
+}
+
+export function getAtlasVerification(): Promise<AtlasVerification> {
+  return request('/api/atlas/verification/latest')
 }
